@@ -44,7 +44,6 @@ pub(crate) struct Session {
     pub(crate) input_queue: InputQueue,
     pub(crate) guardian_review_session: GuardianReviewSessionManager,
     pub(crate) services: SessionServices,
-    pub(super) next_internal_sub_id: AtomicU64,
 }
 
 #[derive(Clone)]
@@ -121,6 +120,13 @@ impl SessionConfiguration {
 
     pub(crate) fn codex_home(&self) -> &AbsolutePathBuf {
         &self.codex_home
+    }
+
+    pub(crate) fn item_ids_enabled(&self) -> bool {
+        self.original_config_do_not_use
+            .features
+            .enabled(Feature::ItemIds)
+            || matches!(self.history_mode, ThreadHistoryMode::Paginated)
     }
 
     pub(super) fn permission_profile_state(&self) -> &PermissionProfileState {
@@ -621,6 +627,7 @@ impl Session {
                     InitialHistory::Resumed(resumed_history) => {
                         let params = ResumeThreadParams {
                             thread_id: resumed_history.conversation_id,
+                            history_mode: session_configuration.history_mode,
                             rollout_path: resumed_history.rollout_path.clone(),
                             history: Some(resumed_history.history.clone()),
                             include_archived: true,
@@ -1110,7 +1117,7 @@ impl Session {
                     config.features.enabled(Feature::EnableRequestCompression),
                     config.features.enabled(Feature::RuntimeMetrics),
                     Self::build_model_client_beta_features_header(config.as_ref()),
-                    /*item_ids_enabled*/ config.features.enabled(Feature::ItemIds),
+                    /*item_ids_enabled*/ session_configuration.item_ids_enabled(),
                     /*concurrent_reasoning_summaries_enabled*/ config
                         .features
                         .enabled(Feature::ConcurrentReasoningSummaries),
@@ -1144,7 +1151,6 @@ impl Session {
                 input_queue: InputQueue::new(),
                 guardian_review_session: GuardianReviewSessionManager::default(),
                 services,
-                next_internal_sub_id: AtomicU64::new(0),
             });
             if let Some(network_policy_decider_session) = network_policy_decider_session {
                 let mut guard = network_policy_decider_session.write().await;
