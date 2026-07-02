@@ -228,6 +228,7 @@ impl ThreadHistoryChangeAccumulator {
 pub struct ThreadHistoryBuilder {
     turns: Vec<Turn>,
     current_turn: Option<PendingTurn>,
+    next_item_index: i64,
     current_rollout_index: usize,
     next_rollout_index: usize,
     active_change_set: Option<ThreadHistoryChangeSet>,
@@ -244,6 +245,7 @@ impl ThreadHistoryBuilder {
         Self {
             turns: Vec::new(),
             current_turn: None,
+            next_item_index: 1,
             current_rollout_index: 0,
             next_rollout_index: 0,
             active_change_set: None,
@@ -1271,6 +1273,9 @@ impl ThreadHistoryBuilder {
         } else {
             self.turns.truncate(self.turns.len().saturating_sub(n));
         }
+
+        let item_count: usize = self.turns.iter().map(|turn| turn.items.len()).sum();
+        self.next_item_index = i64::try_from(item_count.saturating_add(1)).unwrap_or(i64::MAX);
     }
 
     fn finish_current_turn(&mut self) {
@@ -1283,7 +1288,13 @@ impl ThreadHistoryBuilder {
     }
 
     fn new_turn(&mut self, id: Option<String>) -> PendingTurn {
-        let id = id.unwrap_or_else(|| Uuid::now_v7().to_string());
+        let id = id.unwrap_or_else(|| {
+            if self.next_rollout_index == 0 {
+                Uuid::now_v7().to_string()
+            } else {
+                format!("rollout-{}", self.current_rollout_index)
+            }
+        });
         PendingTurn {
             id,
             items: Vec::new(),
@@ -1400,7 +1411,9 @@ impl ThreadHistoryBuilder {
     }
 
     fn next_item_id(&mut self) -> String {
-        Uuid::now_v7().to_string()
+        let id = format!("item-{}", self.next_item_index);
+        self.next_item_index += 1;
+        id
     }
 
     fn build_user_inputs(&self, payload: &UserMessageEvent) -> Vec<UserInput> {
@@ -1730,7 +1743,6 @@ mod tests {
         }
         let mut turns = builder.finish();
         assert!(is_uuid_v7(&turns[0].id));
-        assert!(is_uuid_v7(turns[0].items[0].id()));
         assert!(is_uuid_v7(&turns[1].id));
         normalize_synthetic_turns(&mut turns);
         assert_eq!(turns.len(), 2);
@@ -2368,7 +2380,7 @@ mod tests {
         let turns = build_turns_from_rollout_items(&items);
         assert_eq!(turns.len(), 2);
         assert_eq!(turns[0].id, "rollout-0");
-        assert_eq!(turns[1].id, "rollout-1");
+        assert_eq!(turns[1].id, "rollout-5");
         assert_ne!(turns[0].id, turns[1].id);
         assert_eq!(turns[0].status, TurnStatus::Completed);
         assert_eq!(turns[1].status, TurnStatus::Completed);
