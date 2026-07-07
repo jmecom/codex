@@ -1,0 +1,19 @@
+{
+  "statusLine": [
+    "run-state",
+    "model-with-reasoning",
+    "git-branch",
+    "context-remaining",
+    "current-dir"
+  ],
+  "layout": {
+    "footer": "minimal"
+  },
+  "theme": {
+    "source": "ghostty"
+  },
+  "startup": {
+    "splashBanner": "hidden",
+    "announcementTip": "hidden"
+  }
+}

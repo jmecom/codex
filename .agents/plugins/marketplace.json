@@ -1,0 +1,20 @@
+{
+  "name": "jmecom-codex",
+  "interface": {
+    "displayName": "jmecom/codex"
+  },
+  "plugins": [
+    {
+      "name": "pi-harness-lite",
+      "source": {
+        "source": "local",
+        "path": "./plugins/pi-harness-lite"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
