@@ -19,6 +19,7 @@ use codex_model_provider::SharedModelProvider;
 use codex_protocol::items::WebSearchItem;
 use codex_protocol::models::WebSearchAction;
 use codex_protocol::models::WebSearchSource;
+use codex_protocol::models::bounded_web_search_sources;
 use codex_tools::ResponsesApiNamespace;
 use codex_tools::ResponsesApiNamespaceTool;
 use codex_tools::ToolExposure;
@@ -34,7 +35,6 @@ use crate::schema::commands_schema;
 pub(crate) const WEB_NAMESPACE: &str = "web";
 pub(crate) const RUN_TOOL_NAME: &str = "run";
 const WEB_RUN_DESCRIPTION: &str = include_str!("../web_run_description.md");
-const MAX_SEARCH_SOURCES: usize = 20;
 
 pub(crate) struct WebSearchTool {
     pub(crate) session_id: String,
@@ -187,21 +187,17 @@ fn query_action(queries: &[SearchQuery]) -> Option<WebSearchAction> {
 
 fn search_sources(output: &str) -> Vec<WebSearchSource> {
     let mut urls = HashSet::new();
-    output
-        .lines()
-        .filter_map(|line| {
-            let (_, url) = line.rsplit_once(" (")?;
-            let url = url.strip_suffix(')')?;
-            let parsed = Url::parse(url).ok()?;
-            if !matches!(parsed.scheme(), "http" | "https") || !urls.insert(url) {
-                return None;
-            }
-            Some(WebSearchSource::Url {
-                url: url.to_string(),
-            })
+    bounded_web_search_sources(output.lines().filter_map(|line| {
+        let (_, url) = line.rsplit_once(" (")?;
+        let url = url.strip_suffix(')')?;
+        let parsed = Url::parse(url).ok()?;
+        if !matches!(parsed.scheme(), "http" | "https") || !urls.insert(url) {
+            return None;
+        }
+        Some(WebSearchSource::Url {
+            url: url.to_string(),
         })
-        .take(MAX_SEARCH_SOURCES)
-        .collect()
+    }))
 }
 
 fn literal_url(ref_id: &str) -> Option<String> {
@@ -223,7 +219,6 @@ mod tests {
     use codex_protocol::models::WebSearchSource;
     use pretty_assertions::assert_eq;
 
-    use super::MAX_SEARCH_SOURCES;
     use super::command_action;
     use super::search_sources;
 
@@ -293,11 +288,18 @@ Example article (https://example.com/article)"#,
 
     #[test]
     fn search_sources_are_bounded() {
-        let output = (0..=MAX_SEARCH_SOURCES)
+        let output = (0..=20)
             .map(|index| format!("Result {index} (https://example{index}.com/article)"))
             .collect::<Vec<_>>()
             .join("\n");
 
-        assert_eq!(search_sources(&output).len(), MAX_SEARCH_SOURCES);
+        assert_eq!(search_sources(&output).len(), 20);
+    }
+
+    #[test]
+    fn search_sources_drop_oversized_urls() {
+        let output = format!("Long result (https://example.com/{})", "x".repeat(600));
+
+        assert_eq!(search_sources(&output), Vec::new());
     }
 }

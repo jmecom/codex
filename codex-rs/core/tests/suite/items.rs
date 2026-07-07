@@ -358,6 +358,83 @@ async fn web_search_item_is_emitted() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn web_search_sources_are_bounded_before_context_replay() -> anyhow::Result<()> {
+    skip_if_no_network!(Ok(()));
+
+    let server = start_mock_server().await;
+
+    let TestCodex { codex, .. } = test_codex().build(&server).await?;
+    let valid_urls = (0..21)
+        .map(|index| format!("https://example.com/article/{index}"))
+        .collect::<Vec<_>>();
+    let mut source_urls = vec![format!("https://example.com/{}", "x".repeat(600))];
+    source_urls.extend(valid_urls.iter().cloned());
+    let source_refs = source_urls.iter().map(String::as_str).collect::<Vec<_>>();
+
+    mount_sse_once(
+        &server,
+        sse(vec![
+            ev_response_created("resp-1"),
+            ev_web_search_call_added_partial("web-search-1", "in_progress"),
+            ev_web_search_call_done("web-search-1", "completed", "weather seattle", &source_refs),
+            ev_completed("resp-1"),
+        ]),
+    )
+    .await;
+
+    codex
+        .submit(Op::UserInput {
+            items: vec![UserInput::Text {
+                text: "find the weather".into(),
+                text_elements: Vec::new(),
+            }],
+            final_output_json_schema: None,
+            responsesapi_client_metadata: None,
+            additional_context: Default::default(),
+            thread_settings: Default::default(),
+        })
+        .await?;
+    wait_for_event(&codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
+
+    let second_response = sse(vec![
+        ev_response_created("resp-2"),
+        ev_assistant_message("msg-2", "done"),
+        ev_completed("resp-2"),
+    ]);
+    let second_mock = mount_sse_once(&server, second_response).await;
+
+    codex
+        .submit(Op::UserInput {
+            items: vec![UserInput::Text {
+                text: "summarize the sources".into(),
+                text_elements: Vec::new(),
+            }],
+            final_output_json_schema: None,
+            responsesapi_client_metadata: None,
+            additional_context: Default::default(),
+            thread_settings: Default::default(),
+        })
+        .await?;
+    wait_for_event(&codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
+
+    let request = second_mock.single_request();
+    let web_search_items = request.inputs_of_type("web_search_call");
+    assert_eq!(web_search_items.len(), 1);
+    assert_eq!(
+        web_search_items[0]["action"]["sources"],
+        serde_json::to_value(
+            valid_urls
+                .into_iter()
+                .take(20)
+                .map(|url| WebSearchSource::Url { url })
+                .collect::<Vec<_>>()
+        )?
+    );
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn builtin_image_generation_call_persisted() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
 

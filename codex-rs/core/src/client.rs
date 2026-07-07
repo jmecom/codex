@@ -876,7 +876,7 @@ impl ModelClient {
         } else {
             Vec::new()
         };
-        if is_openai {
+        if is_openai || provider.is_azure_responses_endpoint() {
             include.push("web_search_call.action.sources".to_string());
         }
         let verbosity = if model_info.support_verbosity {

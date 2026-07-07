@@ -1674,6 +1674,45 @@ pub enum WebSearchSource {
     Url { url: String },
 }
 
+const MAX_WEB_SEARCH_SOURCES: usize = 20;
+const MAX_WEB_SEARCH_SOURCE_URL_BYTES: usize = 512;
+const MAX_WEB_SEARCH_SOURCE_TOTAL_URL_BYTES: usize = 2_048;
+
+/// Bounds web search source metadata before it can enter model context.
+pub fn bounded_web_search_sources(
+    sources: impl IntoIterator<Item = WebSearchSource>,
+) -> Vec<WebSearchSource> {
+    let mut bounded_sources = Vec::new();
+    let mut total_url_bytes = 0usize;
+
+    for source in sources {
+        if bounded_sources.len() == MAX_WEB_SEARCH_SOURCES {
+            break;
+        }
+        let url_bytes = match &source {
+            WebSearchSource::Url { url } => url.len(),
+        };
+        if url_bytes > MAX_WEB_SEARCH_SOURCE_URL_BYTES
+            || total_url_bytes.saturating_add(url_bytes) > MAX_WEB_SEARCH_SOURCE_TOTAL_URL_BYTES
+        {
+            continue;
+        }
+        total_url_bytes += url_bytes;
+        bounded_sources.push(source);
+    }
+
+    bounded_sources
+}
+
+fn deserialize_web_search_sources<'de, D>(
+    deserializer: D,
+) -> Result<Option<Vec<WebSearchSource>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(Option::<Vec<WebSearchSource>>::deserialize(deserializer)?.map(bounded_web_search_sources))
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema, TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[schemars(rename = "ResponsesApiWebSearchAction")]
@@ -1685,7 +1724,11 @@ pub enum WebSearchAction {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         queries: Option<Vec<String>>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[serde(
+            default,
+            deserialize_with = "deserialize_web_search_sources",
+            skip_serializing_if = "Option::is_none"
+        )]
         #[ts(optional)]
         sources: Option<Vec<WebSearchSource>>,
     },
@@ -3267,6 +3310,69 @@ mod tests {
             assert_eq!(serialized, expected_serialized);
         }
 
+        Ok(())
+    }
+
+    #[test]
+    fn bounds_web_search_source_count_and_url_length_on_deserialization() -> Result<()> {
+        let valid_urls = (0..21)
+            .map(|index| format!("https://example.com/article/{index}"))
+            .collect::<Vec<_>>();
+        let sources = std::iter::once(format!("https://example.com/{}", "x".repeat(600)))
+            .chain(valid_urls.iter().cloned())
+            .map(|url| serde_json::json!({"type": "url", "url": url}))
+            .collect::<Vec<_>>();
+
+        let action: WebSearchAction = serde_json::from_value(serde_json::json!({
+            "type": "search",
+            "sources": sources,
+        }))?;
+
+        assert_eq!(
+            action,
+            WebSearchAction::Search {
+                query: None,
+                queries: None,
+                sources: Some(
+                    valid_urls
+                        .into_iter()
+                        .take(20)
+                        .map(|url| WebSearchSource::Url { url })
+                        .collect()
+                ),
+            }
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn bounds_total_web_search_source_url_bytes_on_deserialization() -> Result<()> {
+        let urls = (0..5)
+            .map(|index| format!("https://example.com/{index}/{}", "x".repeat(480)))
+            .collect::<Vec<_>>();
+        let sources = urls
+            .iter()
+            .map(|url| serde_json::json!({"type": "url", "url": url}))
+            .collect::<Vec<_>>();
+
+        let action: WebSearchAction = serde_json::from_value(serde_json::json!({
+            "type": "search",
+            "sources": sources,
+        }))?;
+
+        assert_eq!(
+            action,
+            WebSearchAction::Search {
+                query: None,
+                queries: None,
+                sources: Some(
+                    urls.into_iter()
+                        .take(4)
+                        .map(|url| WebSearchSource::Url { url })
+                        .collect()
+                ),
+            }
+        );
         Ok(())
     }
 
