@@ -1,5 +1,6 @@
 use std::collections::VecDeque;
 use std::path::Path;
+use std::path::PathBuf;
 use std::process::ExitStatus;
 use std::process::Stdio;
 use std::sync::atomic::AtomicI64;
@@ -122,6 +123,7 @@ use codex_exec_server::CODEX_EXEC_SERVER_URL_ENV_VAR;
 use codex_login::default_client::CODEX_INTERNAL_ORIGINATOR_OVERRIDE_ENV_VAR;
 use core_test_support::test_codex::TestEnv;
 use core_test_support::test_codex::test_env;
+use tempfile::TempDir;
 use tokio::process::Command;
 
 use crate::json_logging::JsonLogCapture;
@@ -138,6 +140,8 @@ pub struct TestAppServer {
     pending_messages: VecDeque<JSONRPCMessage>,
     auto_env: Option<TestEnv>,
     json_logs: JsonLogCapture,
+    codex_home: PathBuf,
+    _owned_codex_home: Option<TempDir>,
 }
 
 pub const DEFAULT_CLIENT_NAME: &str = "codex-app-server-tests";
@@ -145,6 +149,11 @@ pub const DISABLE_PLUGIN_STARTUP_TASKS_ARG: &str = "--disable-plugin-startup-tas
 const DISABLE_MANAGED_CONFIG_ENV_VAR: &str = "CODEX_APP_SERVER_DISABLE_MANAGED_CONFIG";
 
 impl TestAppServer {
+    /// Starts building a server with the standard automatic test environment.
+    pub fn builder() -> TestAppServerBuilder {
+        TestAppServerBuilder { codex_home: None }
+    }
+
     pub async fn wait_for_exit(&mut self) -> std::io::Result<ExitStatus> {
         self.process.wait().await
     }
@@ -164,7 +173,7 @@ impl TestAppServer {
     /// URL-based configuration, this helper rejects a `codex_home` containing
     /// that file.
     pub async fn new_with_auto_env(codex_home: &Path) -> anyhow::Result<Self> {
-        Self::new_with_auto_env_and_env(codex_home, &[]).await
+        Self::builder().with_codex_home(codex_home).build().await
     }
 
     /// Starts an auto-environment app server that emits JSON logs.
@@ -236,6 +245,11 @@ impl TestAppServer {
             environment_id: selection.environment_id.clone(),
             cwd: selection.cwd.clone().into(),
         })
+    }
+
+    /// Returns the effective CODEX_HOME used by the child app-server.
+    pub fn codex_home(&self) -> &Path {
+        &self.codex_home
     }
 
     /// Waits for a JSON stderr event whose structured `event.name` field matches.
@@ -399,6 +413,8 @@ impl TestAppServer {
             pending_messages: VecDeque::new(),
             auto_env: None,
             json_logs,
+            codex_home: codex_home.to_path_buf(),
+            _owned_codex_home: None,
         })
     }
 
@@ -1789,6 +1805,37 @@ impl TestAppServer {
             JSONRPCMessage::Error(err) => Some(&err.id),
             JSONRPCMessage::Notification(_) => None,
         }
+    }
+}
+
+/// Builder for TestAppServer.
+pub struct TestAppServerBuilder {
+    codex_home: Option<PathBuf>,
+}
+
+impl TestAppServerBuilder {
+    /// Uses this existing CODEX_HOME instead of a temporary one.
+    pub fn with_codex_home(mut self, codex_home: &Path) -> Self {
+        self.codex_home = Some(codex_home.to_path_buf());
+        self
+    }
+
+    /// Builds a server with the standard automatic test environment and a
+    /// temporary CODEX_HOME by default.
+    pub async fn build(self) -> anyhow::Result<TestAppServer> {
+        let (codex_home, owned_codex_home) = match self.codex_home {
+            Some(codex_home) => (codex_home, None),
+            None => {
+                let owned_codex_home = TempDir::new()?;
+                (
+                    owned_codex_home.path().to_path_buf(),
+                    Some(owned_codex_home),
+                )
+            }
+        };
+        let mut app_server = TestAppServer::new_with_auto_env_and_env(&codex_home, &[]).await?;
+        app_server._owned_codex_home = owned_codex_home;
+        Ok(app_server)
     }
 }
 
