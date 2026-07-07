@@ -16,5 +16,15 @@
   "startup": {
     "splashBanner": "hidden",
     "announcementTip": "hidden"
-  }
+  },
+  "slashCommands": [
+    {
+      "name": "history-fzf",
+      "description": "Search saved Codex conversations with fzf.",
+      "terminalCommand": {
+        "command": "./scripts/history-fzf.py",
+        "result": "resume-thread"
+      }
+    }
+  ]
 }

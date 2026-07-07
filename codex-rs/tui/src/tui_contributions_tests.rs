@@ -2,11 +2,16 @@ use super::*;
 use pretty_assertions::assert_eq;
 use std::collections::HashSet;
 
+fn plugin_root() -> &'static Path {
+    Path::new("/plugins/demo")
+}
+
 #[test]
 fn parses_status_line_layout_and_prompt_commands() {
     let contribution = parse_tui_contribution(
         "demo@test",
         "Demo",
+        plugin_root(),
         r#"{
   "statusLine": [" model-with-reasoning ", "", "current-dir"],
   "layout": { "footer": "minimal" },
@@ -50,9 +55,49 @@ fn parses_status_line_layout_and_prompt_commands() {
                 plugin_id: "demo@test".to_string(),
                 name: "piplan".to_string(),
                 description: "Plan with project context".to_string(),
-                submit_prompt: "Make a plan before editing.".to_string(),
+                action: PluginSlashCommandAction::SubmitPrompt(
+                    "Make a plan before editing.".to_string()
+                ),
             }],
         }
+    );
+}
+
+#[test]
+fn parses_terminal_slash_commands_relative_to_plugin_root() {
+    let contribution = parse_tui_contribution(
+        "demo@test",
+        "Demo",
+        plugin_root(),
+        r#"{
+  "slashCommands": [
+    {
+      "name": "history-fzf",
+      "description": "Search conversation history with fzf.",
+      "terminalCommand": {
+        "command": "./scripts/history-fzf.py",
+        "args": ["--limit", "50"],
+        "result": "resume-thread"
+      }
+    }
+  ]
+}"#,
+    )
+    .expect("valid contribution");
+
+    assert_eq!(
+        contribution.slash_commands,
+        vec![PluginSlashCommand {
+            plugin_id: "demo@test".to_string(),
+            name: "history-fzf".to_string(),
+            description: "Search conversation history with fzf.".to_string(),
+            action: PluginSlashCommandAction::TerminalCommand(PluginTerminalCommand {
+                plugin_id: "demo@test".to_string(),
+                command: plugin_root().join("scripts/history-fzf.py"),
+                args: vec!["--limit".to_string(), "50".to_string()],
+                result: PluginTerminalCommandResult::ResumeThread,
+            }),
+        }]
     );
 }
 
@@ -61,6 +106,7 @@ fn ignores_commands_that_conflict_or_would_run_shell() {
     let contribution = parse_tui_contribution(
         "demo@test",
         "Demo",
+        plugin_root(),
         r#"{
   "slashCommands": [
     { "name": "model", "submitPrompt": "This conflicts with a built-in." },
@@ -77,7 +123,7 @@ fn ignores_commands_that_conflict_or_would_run_shell() {
             plugin_id: "demo@test".to_string(),
             name: "ok".to_string(),
             description: "Run a Demo plugin prompt".to_string(),
-            submit_prompt: "Explain the current diff.".to_string(),
+            action: PluginSlashCommandAction::SubmitPrompt("Explain the current diff.".to_string()),
         }]
     );
 }
@@ -87,6 +133,7 @@ fn parses_custom_theme_name() {
     let contribution = parse_tui_contribution(
         "demo@test",
         "Demo",
+        plugin_root(),
         r#"{
   "theme": { "source": "ghostty", "name": "my-ghostty-sync" }
 }"#,
@@ -122,7 +169,7 @@ fn merge_keeps_first_duplicate_command_and_last_singleton_layout_and_theme() {
             plugin_id: "alpha@test".to_string(),
             name: "plan-extra".to_string(),
             description: "First".to_string(),
-            submit_prompt: "First prompt".to_string(),
+            action: PluginSlashCommandAction::SubmitPrompt("First prompt".to_string()),
         }],
     };
     let second = TuiContributionSet {
@@ -143,7 +190,7 @@ fn merge_keeps_first_duplicate_command_and_last_singleton_layout_and_theme() {
             plugin_id: "beta@test".to_string(),
             name: "plan-extra".to_string(),
             description: "Second".to_string(),
-            submit_prompt: "Second prompt".to_string(),
+            action: PluginSlashCommandAction::SubmitPrompt("Second prompt".to_string()),
         }],
     };
 
@@ -172,7 +219,7 @@ fn merge_keeps_first_duplicate_command_and_last_singleton_layout_and_theme() {
                 plugin_id: "alpha@test".to_string(),
                 name: "plan-extra".to_string(),
                 description: "First".to_string(),
-                submit_prompt: "First prompt".to_string(),
+                action: PluginSlashCommandAction::SubmitPrompt("First prompt".to_string()),
             }],
         }
     );

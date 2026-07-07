@@ -150,6 +150,47 @@ impl App {
                     }
                 }
             }
+            AppEvent::RunPluginTerminalCommand { command } => {
+                match crate::plugin_terminal_command::run_plugin_terminal_command(
+                    tui,
+                    &self.config,
+                    command,
+                )
+                .await
+                {
+                    Ok(crate::plugin_terminal_command::PluginTerminalCommandOutcome::NoOutput) => {}
+                    Ok(crate::plugin_terminal_command::PluginTerminalCommandOutcome::Text(
+                        lines,
+                    )) => {
+                        self.chat_widget.add_plain_history_lines(lines);
+                    }
+                    Ok(
+                        crate::plugin_terminal_command::PluginTerminalCommandOutcome::ResumeThread(
+                            id_or_name,
+                        ),
+                    ) => {
+                        match crate::lookup_session_target_with_app_server(app_server, &id_or_name)
+                            .await?
+                        {
+                            Some(target_session) => {
+                                return self
+                                    .resume_target_session(tui, app_server, target_session)
+                                    .await;
+                            }
+                            None => {
+                                self.chat_widget.add_error_message(format!(
+                                    "No saved chat found matching '{id_or_name}'."
+                                ));
+                            }
+                        }
+                    }
+                    Err(error_message) => {
+                        self.chat_widget.add_error_message(error_message);
+                    }
+                }
+
+                tui.frame_requester().schedule_frame();
+            }
             AppEvent::ArchiveCurrentThread => {
                 return Ok(self.archive_current_thread(app_server).await);
             }

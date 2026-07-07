@@ -17,6 +17,8 @@ use crate::render::Insets;
 use crate::render::RectExt;
 use crate::slash_command::SlashCommand;
 use crate::tui_contributions::PluginSlashCommand;
+#[cfg(test)]
+use crate::tui_contributions::PluginSlashCommandAction;
 
 // Hide alias commands in the default popup list so each unique action appears once.
 // `quit` is an alias of `exit`, and `btw` is an alias of `side`, so we skip
@@ -460,7 +462,9 @@ mod tests {
                 plugin_id: "demo@test".to_string(),
                 name: "piplan".to_string(),
                 description: "Plan with project context".to_string(),
-                submit_prompt: "Make a plan before editing.".to_string(),
+                action: PluginSlashCommandAction::SubmitPrompt(
+                    "Make a plan before editing.".to_string(),
+                ),
             }],
         );
         popup.on_composer_text_change("/pi".to_string());

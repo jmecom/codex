@@ -10,6 +10,8 @@ use codex_utils_fuzzy_match::fuzzy_match;
 use crate::slash_command::SlashCommand;
 use crate::slash_command::built_in_slash_commands;
 use crate::tui_contributions::PluginSlashCommand;
+#[cfg(test)]
+use crate::tui_contributions::PluginSlashCommandAction;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct ServiceTierCommand {
@@ -372,7 +374,7 @@ mod tests {
             plugin_id: "demo@test".to_string(),
             name: "piplan".to_string(),
             description: "Plan with plugin context".to_string(),
-            submit_prompt: "Make a plan.".to_string(),
+            action: PluginSlashCommandAction::SubmitPrompt("Make a plan.".to_string()),
         };
 
         let items = commands_for_input(all_enabled_flags(), &[], from_ref(&command));
@@ -386,7 +388,7 @@ mod tests {
             plugin_id: "demo@test".to_string(),
             name: "model".to_string(),
             description: "Model override".to_string(),
-            submit_prompt: "Pick a model.".to_string(),
+            action: PluginSlashCommandAction::SubmitPrompt("Pick a model.".to_string()),
         };
 
         assert_eq!(
@@ -401,7 +403,7 @@ mod tests {
             plugin_id: "demo@test".to_string(),
             name: "piplan".to_string(),
             description: "Plan with plugin context".to_string(),
-            submit_prompt: "Make a plan.".to_string(),
+            action: PluginSlashCommandAction::SubmitPrompt("Make a plan.".to_string()),
         };
 
         assert_eq!(

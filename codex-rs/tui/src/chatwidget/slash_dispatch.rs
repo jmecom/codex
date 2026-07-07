@@ -16,6 +16,7 @@ use crate::bottom_pane::slash_commands::find_slash_command;
 use crate::goal_display::GOAL_USAGE;
 use crate::goal_files::GoalDraft;
 use crate::tui_contributions::PluginSlashCommand;
+use crate::tui_contributions::PluginSlashCommandAction;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum SlashCommandDispatchSource {
@@ -69,16 +70,25 @@ impl ChatWidget {
     }
 
     pub(super) fn handle_plugin_slash_command_dispatch(&mut self, command: PluginSlashCommand) {
-        let history_record = UserMessageHistoryRecord::Override(UserMessageHistoryOverride {
-            text: String::new(),
-            text_elements: Vec::new(),
-        });
-        self.queue_user_message_with_options_and_history_record(
-            UserMessage::from(command.submit_prompt),
-            QueuedInputAction::Plain,
-            Vec::new(),
-            history_record,
-        );
+        match command.action {
+            PluginSlashCommandAction::SubmitPrompt(submit_prompt) => {
+                let history_record =
+                    UserMessageHistoryRecord::Override(UserMessageHistoryOverride {
+                        text: String::new(),
+                        text_elements: Vec::new(),
+                    });
+                self.queue_user_message_with_options_and_history_record(
+                    UserMessage::from(submit_prompt),
+                    QueuedInputAction::Plain,
+                    Vec::new(),
+                    history_record,
+                );
+            }
+            PluginSlashCommandAction::TerminalCommand(command) => {
+                self.app_event_tx
+                    .send(AppEvent::RunPluginTerminalCommand { command });
+            }
+        }
         self.bottom_pane.record_pending_slash_command_history();
     }
 

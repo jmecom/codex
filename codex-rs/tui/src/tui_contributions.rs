@@ -5,6 +5,8 @@
 //! internals or allowing plugin code to run inside the render loop.
 
 use std::collections::HashSet;
+use std::path::Path;
+use std::path::PathBuf;
 use std::str::FromStr;
 
 use codex_core_plugins::PluginsManager;
@@ -21,6 +23,9 @@ const MAX_PLUGIN_SLASH_COMMANDS: usize = 64;
 const MAX_PLUGIN_SLASH_COMMAND_NAME_LEN: usize = 40;
 const MAX_PLUGIN_SLASH_COMMAND_DESCRIPTION_LEN: usize = 160;
 const MAX_PLUGIN_SLASH_COMMAND_PROMPT_LEN: usize = 4000;
+const MAX_PLUGIN_TERMINAL_COMMAND_LEN: usize = 512;
+const MAX_PLUGIN_TERMINAL_COMMAND_ARGS: usize = 32;
+const MAX_PLUGIN_TERMINAL_COMMAND_ARG_LEN: usize = 512;
 const MAX_THEME_NAME_LEN: usize = 80;
 pub(crate) const DEFAULT_GHOSTTY_SYNC_THEME_NAME: &str = "ghostty-sync";
 
@@ -50,7 +55,29 @@ pub(crate) struct PluginSlashCommand {
     pub(crate) plugin_id: String,
     pub(crate) name: String,
     pub(crate) description: String,
-    pub(crate) submit_prompt: String,
+    pub(crate) action: PluginSlashCommandAction,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum PluginSlashCommandAction {
+    SubmitPrompt(String),
+    TerminalCommand(PluginTerminalCommand),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct PluginTerminalCommand {
+    pub(crate) plugin_id: String,
+    pub(crate) command: PathBuf,
+    pub(crate) args: Vec<String>,
+    pub(crate) result: PluginTerminalCommandResult,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum PluginTerminalCommandResult {
+    #[default]
+    None,
+    ResumeThread,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -157,6 +184,19 @@ struct RawTuiSlashCommand {
     description: Option<String>,
     #[serde(default)]
     submit_prompt: Option<String>,
+    #[serde(default)]
+    terminal_command: Option<RawPluginTerminalCommand>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RawPluginTerminalCommand {
+    #[serde(default)]
+    command: Option<String>,
+    #[serde(default)]
+    args: Vec<String>,
+    #[serde(default)]
+    result: PluginTerminalCommandResult,
 }
 
 impl TuiContributionSet {
@@ -190,19 +230,22 @@ impl TuiContributionSet {
                     continue;
                 }
             };
-            let contribution =
-                match parse_tui_contribution(&plugin.config_name, plugin.display_name(), &contents)
-                {
-                    Ok(contribution) => contribution,
-                    Err(err) => {
-                        warn!(
-                            plugin = plugin.config_name,
-                            path = %tui_path.display(),
-                            "failed to parse plugin TUI contribution: {err}"
-                        );
-                        continue;
-                    }
-                };
+            let contribution = match parse_tui_contribution(
+                &plugin.config_name,
+                plugin.display_name(),
+                plugin.root.as_path(),
+                &contents,
+            ) {
+                Ok(contribution) => contribution,
+                Err(err) => {
+                    warn!(
+                        plugin = plugin.config_name,
+                        path = %tui_path.display(),
+                        "failed to parse plugin TUI contribution: {err}"
+                    );
+                    continue;
+                }
+            };
             set.merge_from_plugin(contribution, &mut seen_slash_commands);
         }
 
@@ -285,6 +328,7 @@ impl StartupUiContribution {
 fn parse_tui_contribution(
     plugin_id: &str,
     plugin_display_name: &str,
+    plugin_root: &Path,
     contents: &str,
 ) -> Result<TuiContributionSet, serde_json::Error> {
     let raw = serde_json::from_str::<RawTuiContribution>(contents)?;
@@ -293,8 +337,12 @@ fn parse_tui_contribution(
     let theme = raw.theme.and_then(normalize_theme_contribution);
     let changes = raw.changes.map(normalize_change_ui).unwrap_or_default();
     let startup = raw.startup.map(normalize_startup_ui).unwrap_or_default();
-    let slash_commands =
-        normalize_plugin_slash_commands(plugin_id, plugin_display_name, raw.slash_commands);
+    let slash_commands = normalize_plugin_slash_commands(
+        plugin_id,
+        plugin_display_name,
+        plugin_root,
+        raw.slash_commands,
+    );
 
     Ok(TuiContributionSet {
         status_line,
@@ -355,6 +403,7 @@ fn normalize_status_line(items: Vec<String>) -> Vec<String> {
 fn normalize_plugin_slash_commands(
     plugin_id: &str,
     plugin_display_name: &str,
+    plugin_root: &Path,
     commands: Vec<RawTuiSlashCommand>,
 ) -> Vec<PluginSlashCommand> {
     let mut normalized = Vec::new();
@@ -385,11 +434,16 @@ fn normalize_plugin_slash_commands(
             continue;
         }
 
-        let Some(submit_prompt) = normalize_submit_prompt(raw.submit_prompt.as_deref()) else {
+        let Some(action) = normalize_plugin_slash_command_action(
+            plugin_id,
+            plugin_root,
+            raw.submit_prompt.as_deref(),
+            raw.terminal_command,
+        ) else {
             warn!(
                 plugin = plugin_id,
                 command = name,
-                "ignoring plugin slash command with invalid submitPrompt"
+                "ignoring plugin slash command with invalid action"
             );
             continue;
         };
@@ -403,11 +457,64 @@ fn normalize_plugin_slash_commands(
             plugin_id: plugin_id.to_string(),
             name,
             description,
-            submit_prompt,
+            action,
         });
     }
 
     normalized
+}
+
+fn normalize_plugin_slash_command_action(
+    plugin_id: &str,
+    plugin_root: &Path,
+    submit_prompt: Option<&str>,
+    terminal_command: Option<RawPluginTerminalCommand>,
+) -> Option<PluginSlashCommandAction> {
+    if let Some(submit_prompt) = submit_prompt {
+        return normalize_submit_prompt(Some(submit_prompt))
+            .map(PluginSlashCommandAction::SubmitPrompt);
+    }
+
+    terminal_command
+        .and_then(|command| normalize_terminal_command(plugin_id, plugin_root, command))
+        .map(PluginSlashCommandAction::TerminalCommand)
+}
+
+fn normalize_terminal_command(
+    plugin_id: &str,
+    plugin_root: &Path,
+    raw: RawPluginTerminalCommand,
+) -> Option<PluginTerminalCommand> {
+    let command = raw.command?;
+    let command = command.trim();
+    if command.is_empty()
+        || command.chars().count() > MAX_PLUGIN_TERMINAL_COMMAND_LEN
+        || command.contains('\0')
+    {
+        return None;
+    }
+
+    let command_path = PathBuf::from(command);
+    let command = if command_path.is_relative() && command_path.components().count() > 1 {
+        plugin_root.join(command_path)
+    } else {
+        command_path
+    };
+    let args = raw
+        .args
+        .into_iter()
+        .take(MAX_PLUGIN_TERMINAL_COMMAND_ARGS)
+        .filter(|arg| {
+            !arg.contains('\0') && arg.chars().count() <= MAX_PLUGIN_TERMINAL_COMMAND_ARG_LEN
+        })
+        .collect();
+
+    Some(PluginTerminalCommand {
+        plugin_id: plugin_id.to_string(),
+        command,
+        args,
+        result: raw.result,
+    })
 }
 
 fn normalize_plugin_slash_command_name(name: &str) -> Option<String> {

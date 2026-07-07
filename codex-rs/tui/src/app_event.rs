@@ -52,6 +52,7 @@ use codex_protocol::models::ActivePermissionProfile;
 use codex_protocol::openai_models::ReasoningEffort;
 
 use crate::history_cell::HistoryCell;
+use crate::tui_contributions::PluginTerminalCommand;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ThreadGoalSetMode {
@@ -230,6 +231,11 @@ pub(crate) enum AppEvent {
 
     /// Resume a thread by UUID or thread name inside the running TUI session.
     ResumeSessionByIdOrName(String),
+
+    /// Run a plugin-provided terminal command with the TUI temporarily restored.
+    RunPluginTerminalCommand {
+        command: PluginTerminalCommand,
+    },
 
     /// Archive the current active main thread and exit after it succeeds.
     ArchiveCurrentThread,
