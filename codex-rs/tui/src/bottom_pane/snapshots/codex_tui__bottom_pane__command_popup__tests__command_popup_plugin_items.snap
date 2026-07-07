@@ -1,0 +1,5 @@
+---
+source: tui/src/bottom_pane/command_popup.rs
+expression: commands
+---
+/piplan - Plan with project context

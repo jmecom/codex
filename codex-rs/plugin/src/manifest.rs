@@ -21,6 +21,7 @@ pub struct PluginManifestPaths<Resource> {
     pub mcp_servers: Option<PluginManifestMcpServers<Resource>>,
     pub apps: Option<Resource>,
     pub hooks: Option<PluginManifestHooks<Resource>>,
+    pub tui: Option<Resource>,
 }
 
 /// MCP server declarations embedded in or referenced by a plugin manifest.
@@ -108,6 +109,7 @@ impl<Resource> PluginManifest<Resource> {
             mcp_servers,
             apps,
             hooks,
+            tui,
         } = paths;
         let hooks = match hooks {
             Some(PluginManifestHooks::Paths(paths)) => Some(PluginManifestHooks::Paths(
@@ -184,6 +186,7 @@ impl<Resource> PluginManifest<Resource> {
                 mcp_servers,
                 apps: apps.map(&mut map).transpose()?,
                 hooks,
+                tui: tui.map(&mut map).transpose()?,
             },
             interface,
         })

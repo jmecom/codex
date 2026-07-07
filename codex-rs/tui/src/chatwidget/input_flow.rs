@@ -59,6 +59,9 @@ impl ChatWidget {
             InputResult::ServiceTierCommand(command) => {
                 self.handle_service_tier_command_dispatch(command);
             }
+            InputResult::PluginSlashCommand(command) => {
+                self.handle_plugin_slash_command_dispatch(command);
+            }
             InputResult::CommandWithArgs(cmd, args, text_elements) => {
                 self.handle_slash_command_with_args_dispatch(cmd, args, text_elements);
             }
@@ -99,6 +102,21 @@ impl ChatWidget {
         action: QueuedInputAction,
         pending_pastes: Vec<(String, String)>,
     ) {
+        self.queue_user_message_with_options_and_history_record(
+            user_message,
+            action,
+            pending_pastes,
+            UserMessageHistoryRecord::UserMessageText,
+        );
+    }
+
+    pub(super) fn queue_user_message_with_options_and_history_record(
+        &mut self,
+        user_message: UserMessage,
+        action: QueuedInputAction,
+        pending_pastes: Vec<(String, String)>,
+        history_record: UserMessageHistoryRecord,
+    ) {
         if !self.is_session_configured()
             || self.is_user_turn_pending_or_running()
             || self.input_queue.suppress_queue_autosend
@@ -112,10 +130,10 @@ impl ChatWidget {
                 });
             self.input_queue
                 .queued_user_message_history_records
-                .push_back(UserMessageHistoryRecord::UserMessageText);
+                .push_back(history_record);
             self.refresh_pending_input_preview();
         } else {
-            self.submit_user_message(user_message);
+            self.submit_user_message_with_history_record(user_message, history_record);
         }
     }
 

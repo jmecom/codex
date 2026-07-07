@@ -31,6 +31,7 @@ impl ChatWidget {
             status_line_invalid_items_warned,
             terminal_title_invalid_items_warned,
             session_telemetry,
+            tui_contributions,
         } = common;
         let model = model.filter(|m| !m.trim().is_empty());
         let mut config = config;
@@ -47,6 +48,8 @@ impl ChatWidget {
             .unwrap_or_else(|| DEFAULT_MODEL_DISPLAY_NAME.to_string());
         let active_collaboration_mask =
             Self::initial_collaboration_mask(&config, model_catalog.as_ref(), model_override);
+        let show_splash_banner = tui_contributions.show_splash_banner();
+        let show_announcement_tip = tui_contributions.show_announcement_tip();
         let header_model = active_collaboration_mask
             .as_ref()
             .and_then(|mask| mask.model.clone())
@@ -62,7 +65,8 @@ impl ChatWidget {
             settings: fallback_default,
         };
 
-        let active_cell = Some(Self::placeholder_session_header_cell(&config));
+        let active_cell =
+            show_splash_banner.then(|| Self::placeholder_session_header_cell(&config));
 
         let current_cwd = Some(config.cwd.to_path_buf());
         let effective_service_tier = crate::service_tier_resolution::effective_service_tier(
@@ -174,6 +178,7 @@ impl ChatWidget {
             plugin_install_auth_flow: None,
             plugins_active_tab_id: None,
             newly_installed_marketplace_tab_id: None,
+            plugin_slash_commands: tui_contributions.slash_commands.clone(),
             interrupts: InterruptManager::new(),
             reasoning_buffer: String::new(),
             full_reasoning_buffer: String::new(),
@@ -201,8 +206,14 @@ impl ChatWidget {
             cancel_edit: CancelEditState::default(),
             chat_keymap,
             queued_message_edit_hint_binding,
-            show_welcome_banner: is_first_run,
-            startup_tooltip_override,
+            show_splash_banner,
+            show_welcome_banner: is_first_run && show_splash_banner,
+            show_announcement_tip,
+            startup_tooltip_override: if show_announcement_tip {
+                startup_tooltip_override
+            } else {
+                None
+            },
             suppress_session_configured_redraw: false,
             suppress_initial_user_message_submit: false,
             pending_notification: None,
@@ -256,6 +267,12 @@ impl ChatWidget {
         widget
             .bottom_pane
             .set_collaboration_modes_enabled(/*enabled*/ true);
+        widget
+            .bottom_pane
+            .set_footer_layout_preset(tui_contributions.footer_layout.unwrap_or_default());
+        widget
+            .bottom_pane
+            .set_plugin_slash_commands(widget.plugin_slash_commands.clone());
         widget.sync_service_tier_commands();
         widget.sync_personality_command_enabled();
         widget.sync_plugins_command_enabled();

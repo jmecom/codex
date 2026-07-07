@@ -34,6 +34,7 @@ fn environment_descriptor_binds_every_manifest_resource() {
     let mcp_servers = root.join(".mcp.json");
     let apps = root.join(".app.json");
     let hooks = root.join("hooks/hooks.json");
+    let tui = root.join("tui.json");
     let composer_icon = root.join("assets/composer.svg");
     let logo = root.join("assets/logo.svg");
     let screenshot = root.join("assets/screenshot.png");
@@ -47,6 +48,7 @@ fn environment_descriptor_binds_every_manifest_resource() {
             mcp_servers: Some(PluginManifestMcpServers::Path(path_uri(&mcp_servers))),
             apps: Some(path_uri(&apps)),
             hooks: Some(PluginManifestHooks::Paths(vec![path_uri(&hooks)])),
+            tui: Some(path_uri(&tui)),
         },
         interface: Some(PluginManifestInterface {
             composer_icon: Some(path_uri(&composer_icon)),
@@ -87,6 +89,7 @@ fn environment_descriptor_binds_every_manifest_resource() {
                     "executor-1",
                     &hooks
                 )])),
+                tui: Some(resource("executor-1", &tui)),
             },
             interface: Some(PluginManifestInterface {
                 composer_icon: Some(resource("executor-1", &composer_icon)),
@@ -113,6 +116,7 @@ fn environment_descriptor_rejects_resources_outside_package_root() {
             mcp_servers: Some(PluginManifestMcpServers::Path(path_uri(&outside))),
             apps: None,
             hooks: None,
+            tui: None,
         },
         interface: None,
     };

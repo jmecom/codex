@@ -1916,6 +1916,7 @@ async fn load_plugin_skills_dedupes_overlapping_manifest_roots() {
             mcp_servers: None,
             apps: None,
             hooks: None,
+            tui: None,
         },
         interface: None,
     };
@@ -2522,7 +2523,7 @@ async fn skills_service_reuses_skills_parsed_during_plugin_load() {
     let skills_input = SkillsLoadInput::new(
         codex_home_abs.clone(),
         plugin_outcome.effective_plugin_skill_roots(),
-        config.config_layer_stack.clone(),
+        ConfigLayerStack::default(),
         /*bundled_skills_enabled*/ false,
     )
     .with_plugin_skill_snapshots(plugin_skill_snapshots);

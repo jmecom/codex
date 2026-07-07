@@ -109,19 +109,41 @@ impl ChatWidget {
         self.refresh_plugin_mentions();
         let model_for_header = self.current_model().to_string();
         if display == SessionConfiguredDisplay::Normal {
-            let startup_tooltip_override = self.startup_tooltip_override.take();
-            let show_fast_status = self
-                .should_show_fast_status(&model_for_header, self.effective_service_tier.as_deref());
-            let session_info_cell = history_cell::new_session_info(
-                &self.config,
-                &model_for_header,
-                &session,
-                self.show_welcome_banner,
-                startup_tooltip_override,
-                self.plan_type,
-                show_fast_status,
-            );
-            self.apply_session_info_cell(session_info_cell);
+            if self.show_splash_banner || self.show_announcement_tip {
+                let startup_tooltip_override = if self.show_announcement_tip {
+                    self.startup_tooltip_override.take()
+                } else {
+                    None
+                };
+                let session_info_config;
+                let config = if self.show_announcement_tip {
+                    &self.config
+                } else {
+                    session_info_config = {
+                        let mut config = self.config.clone();
+                        config.show_tooltips = false;
+                        config
+                    };
+                    &session_info_config
+                };
+                let show_fast_status = self.should_show_fast_status(
+                    &model_for_header,
+                    self.effective_service_tier.as_deref(),
+                );
+                let session_info_cell = history_cell::new_session_info(
+                    config,
+                    &model_for_header,
+                    &session,
+                    self.show_welcome_banner,
+                    startup_tooltip_override,
+                    self.plan_type,
+                    show_fast_status,
+                );
+                self.apply_session_info_cell(session_info_cell);
+            } else {
+                self.transcript.active_cell = None;
+                self.bump_active_cell_revision();
+            }
         } else if self
             .transcript
             .active_cell

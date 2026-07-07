@@ -16,6 +16,7 @@ use crate::bottom_pane::slash_commands::SlashCommandItem;
 use crate::bottom_pane::slash_commands::find_slash_command;
 use crate::bottom_pane::slash_commands::has_slash_command_prefix;
 use crate::slash_command::SlashCommand;
+use crate::tui_contributions::PluginSlashCommand;
 use codex_protocol::user_input::ByteRange;
 use codex_protocol::user_input::TextElement;
 
@@ -48,6 +49,7 @@ pub(super) struct SlashInput<'a> {
     is_bash_mode: bool,
     command_flags: BuiltinCommandFlags,
     service_tier_commands: &'a [ServiceTierCommand],
+    plugin_slash_commands: &'a [PluginSlashCommand],
 }
 
 impl<'a> SlashInput<'a> {
@@ -56,12 +58,14 @@ impl<'a> SlashInput<'a> {
         is_bash_mode: bool,
         command_flags: BuiltinCommandFlags,
         service_tier_commands: &'a [ServiceTierCommand],
+        plugin_slash_commands: &'a [PluginSlashCommand],
     ) -> Self {
         Self {
             enabled,
             is_bash_mode,
             command_flags,
             service_tier_commands,
+            plugin_slash_commands,
         }
     }
 
@@ -165,11 +169,16 @@ impl<'a> SlashInput<'a> {
             return rest.is_empty();
         }
 
-        has_slash_command_prefix(name, self.command_flags, self.service_tier_commands)
+        has_slash_command_prefix(
+            name,
+            self.command_flags,
+            self.service_tier_commands,
+            self.plugin_slash_commands,
+        )
     }
 
     pub(super) fn command_popup(&self, filter_text: &str) -> CommandPopup {
-        let mut command_popup = CommandPopup::new(
+        let mut command_popup = CommandPopup::new_with_plugin_commands(
             CommandPopupFlags {
                 collaboration_modes_enabled: self.command_flags.collaboration_modes_enabled,
                 connectors_enabled: self.command_flags.connectors_enabled,
@@ -182,13 +191,19 @@ impl<'a> SlashInput<'a> {
                 side_conversation_active: self.command_flags.side_conversation_active,
             },
             self.service_tier_commands.to_vec(),
+            self.plugin_slash_commands.to_vec(),
         );
         command_popup.on_composer_text_change(filter_text.to_string());
         command_popup
     }
 
     fn command(&self, name: &str) -> Option<SlashCommandItem> {
-        find_slash_command(name, self.command_flags, self.service_tier_commands)
+        find_slash_command(
+            name,
+            self.command_flags,
+            self.service_tier_commands,
+            self.plugin_slash_commands,
+        )
     }
 }
 
@@ -367,6 +382,9 @@ impl ChatComposer {
                             CommandItem::Builtin(cmd) => InputResult::Command(cmd),
                             CommandItem::ServiceTier(command) => {
                                 InputResult::ServiceTierCommand(command)
+                            }
+                            CommandItem::Plugin(command) => {
+                                InputResult::PluginSlashCommand(command)
                             }
                         },
                         true,

@@ -104,6 +104,8 @@ pub(crate) mod prompt_args;
 mod skill_popup;
 mod skills_toggle_view;
 pub(crate) mod slash_commands;
+use crate::tui_contributions::FooterLayoutPreset;
+use crate::tui_contributions::PluginSlashCommand;
 pub(crate) use footer::CollaborationModeIndicator;
 pub(crate) use footer::GoalStatusIndicator;
 #[cfg(test)]
@@ -426,6 +428,16 @@ impl BottomPane {
 
     pub fn set_service_tier_commands(&mut self, commands: Vec<ServiceTierCommand>) {
         self.composer.set_service_tier_commands(commands);
+        self.request_redraw();
+    }
+
+    pub(crate) fn set_plugin_slash_commands(&mut self, commands: Vec<PluginSlashCommand>) {
+        self.composer.set_plugin_slash_commands(commands);
+        self.request_redraw();
+    }
+
+    pub(crate) fn set_footer_layout_preset(&mut self, preset: FooterLayoutPreset) {
+        self.composer.set_footer_layout_preset(preset);
         self.request_redraw();
     }
 

@@ -223,6 +223,8 @@ use crate::render::RectExt;
 use crate::render::renderable::Renderable;
 use crate::slash_command::SlashCommand;
 use crate::style::user_message_style;
+use crate::tui_contributions::FooterLayoutPreset;
+use crate::tui_contributions::PluginSlashCommand;
 use codex_protocol::ThreadId;
 use codex_protocol::user_input::ByteRange;
 use codex_protocol::user_input::MAX_USER_INPUT_TEXT_CHARS;
@@ -306,6 +308,8 @@ pub enum InputResult {
     Command(SlashCommand),
     /// A bare model service-tier command parsed by the composer.
     ServiceTierCommand(ServiceTierCommand),
+    /// A bare plugin-provided prompt command parsed by the composer.
+    PluginSlashCommand(PluginSlashCommand),
     /// An inline slash command and its trimmed argument text.
     ///
     /// The `TextElement` ranges are rebased into the argument string, while any pending local
@@ -393,6 +397,8 @@ pub(crate) struct ChatComposer {
     token_activity_command_enabled: bool,
     service_tier_commands_enabled: bool,
     service_tier_commands: Vec<ServiceTierCommand>,
+    plugin_slash_commands: Vec<PluginSlashCommand>,
+    footer_layout_preset: FooterLayoutPreset,
     mentions_v2_enabled: bool,
     goal_command_enabled: bool,
     personality_command_enabled: bool,
@@ -451,6 +457,7 @@ impl ChatComposer {
             self.draft.is_bash_mode,
             self.builtin_command_flags(),
             &self.service_tier_commands,
+            &self.plugin_slash_commands,
         )
     }
 
@@ -557,6 +564,8 @@ impl ChatComposer {
             token_activity_command_enabled: false,
             service_tier_commands_enabled: false,
             service_tier_commands: Vec::new(),
+            plugin_slash_commands: Vec::new(),
+            footer_layout_preset: FooterLayoutPreset::Default,
             mentions_v2_enabled: false,
             goal_command_enabled: false,
             personality_command_enabled: false,
@@ -654,6 +663,15 @@ impl ChatComposer {
     pub fn set_service_tier_commands(&mut self, commands: Vec<ServiceTierCommand>) {
         self.service_tier_commands = commands;
         self.sync_popups();
+    }
+
+    pub(crate) fn set_plugin_slash_commands(&mut self, commands: Vec<PluginSlashCommand>) {
+        self.plugin_slash_commands = commands;
+        self.sync_popups();
+    }
+
+    pub(crate) fn set_footer_layout_preset(&mut self, preset: FooterLayoutPreset) {
+        self.footer_layout_preset = preset;
     }
 
     pub fn set_goal_command_enabled(&mut self, enabled: bool) {
@@ -2797,6 +2815,7 @@ impl ChatComposer {
                 | InputResult::Queued { .. }
                 | InputResult::Command(_)
                 | InputResult::ServiceTierCommand(_)
+                | InputResult::PluginSlashCommand(_)
                 | InputResult::CommandWithArgs(_, _, _)
         ) {
             self.draft.textarea.enter_vim_normal_mode();
@@ -2959,6 +2978,7 @@ impl ChatComposer {
         Some(match command {
             SlashCommandItem::Builtin(cmd) => InputResult::Command(cmd),
             SlashCommandItem::ServiceTier(command) => InputResult::ServiceTierCommand(command),
+            SlashCommandItem::Plugin(command) => InputResult::PluginSlashCommand(command),
         })
     }
 
@@ -3539,10 +3559,25 @@ impl ChatComposer {
         if self.footer.flash_visible() {
             return Some(1);
         }
-        self.footer
-            .hint_override
-            .as_ref()
-            .map(|items| if items.is_empty() { 0 } else { 1 })
+        if let Some(items) = self.footer.hint_override.as_ref() {
+            return Some(if items.is_empty() { 0 } else { 1 });
+        }
+        if self.footer_layout_preset == FooterLayoutPreset::Minimal
+            && self.minimal_footer_can_hide_idle_row()
+        {
+            return Some(0);
+        }
+        None
+    }
+
+    fn minimal_footer_can_hide_idle_row(&self) -> bool {
+        let props = self.footer_props();
+        matches!(
+            props.mode,
+            FooterMode::ComposerEmpty | FooterMode::ComposerHasDraft
+        ) && !props.is_task_running
+            && !props.status_line_enabled
+            && props.active_agent_label.is_none()
     }
 
     pub(crate) fn sync_popups(&mut self) {
@@ -4838,6 +4873,14 @@ mod tests {
             /*enhanced_keys_supported*/ true,
             |composer| {
                 type_chars_humanlike(composer, &['h']);
+            },
+        );
+
+        snapshot_composer_state(
+            "footer_layout_minimal_idle",
+            /*enhanced_keys_supported*/ true,
+            |composer| {
+                composer.set_footer_layout_preset(FooterLayoutPreset::Minimal);
             },
         );
 
@@ -7964,6 +8007,9 @@ mod tests {
                 Some(CommandItem::ServiceTier(command)) => {
                     panic!("expected model command, got service tier {command:?}")
                 }
+                Some(CommandItem::Plugin(command)) => {
+                    panic!("expected model command, got plugin command {command:?}")
+                }
                 None => panic!("no selected command for '/mo'"),
             },
             _ => panic!("slash popup not active after typing '/mo'"),
@@ -8046,6 +8092,9 @@ mod tests {
                 Some(CommandItem::ServiceTier(command)) => {
                     panic!("expected resume command, got service tier {command:?}")
                 }
+                Some(CommandItem::Plugin(command)) => {
+                    panic!("expected resume command, got plugin command {command:?}")
+                }
                 None => panic!("no selected command for '/res'"),
             },
             _ => panic!("slash popup not active after typing '/res'"),
@@ -8099,6 +8148,9 @@ mod tests {
                 }
                 Some(CommandItem::ServiceTier(command)) => {
                     panic!("expected pets command, got service tier {command:?}")
+                }
+                Some(CommandItem::Plugin(command)) => {
+                    panic!("expected pets command, got plugin command {command:?}")
                 }
                 None => panic!("no selected command for '/pet'"),
             },
@@ -8154,6 +8206,9 @@ mod tests {
                 Some(CommandItem::ServiceTier(command)) => {
                     panic!("expected btw command, got service tier {command:?}")
                 }
+                Some(CommandItem::Plugin(command)) => {
+                    panic!("expected btw command, got plugin command {command:?}")
+                }
                 None => panic!("no selected command for '/bt'"),
             },
             _ => panic!("slash popup not active after typing '/bt'"),
@@ -8207,6 +8262,9 @@ mod tests {
                 }
                 Some(CommandItem::ServiceTier(command)) => {
                     panic!("expected side command, got service tier {command:?}")
+                }
+                Some(CommandItem::Plugin(command)) => {
+                    panic!("expected side command, got plugin command {command:?}")
                 }
                 None => panic!("no selected command for '/si'"),
             },
@@ -8305,6 +8363,9 @@ mod tests {
             }
             InputResult::ServiceTierCommand(command) => {
                 panic!("expected init command, got service tier {command:?}")
+            }
+            InputResult::PluginSlashCommand(command) => {
+                panic!("expected init command, got plugin command {command:?}")
             }
             InputResult::Submitted { text, .. } => {
                 panic!("expected command dispatch, but composer submitted literal text: {text}")
@@ -8813,6 +8874,9 @@ mod tests {
             InputResult::ServiceTierCommand(command) => {
                 panic!("expected diff command, got service tier {command:?}")
             }
+            InputResult::PluginSlashCommand(command) => {
+                panic!("expected diff command, got plugin command {command:?}")
+            }
             InputResult::Submitted { text, .. } => {
                 panic!("expected command dispatch after Tab completion, got literal submit: {text}")
             }
@@ -9009,6 +9073,9 @@ mod tests {
             }
             InputResult::ServiceTierCommand(command) => {
                 panic!("expected mention command, got service tier {command:?}")
+            }
+            InputResult::PluginSlashCommand(command) => {
+                panic!("expected mention command, got plugin command {command:?}")
             }
             InputResult::Submitted { text, .. } => {
                 panic!("expected command dispatch, but composer submitted literal text: {text}")

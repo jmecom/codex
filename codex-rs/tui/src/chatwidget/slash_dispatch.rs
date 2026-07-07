@@ -5,6 +5,7 @@
 //! dispatch step and records the staged entry once the command has been handled, so
 //! slash-command recall follows the same submitted-input rule as ordinary text.
 
+use super::user_messages::UserMessageHistoryOverride;
 use super::*;
 use crate::app_event::ThreadGoalSetMode;
 use crate::bottom_pane::prompt_args::parse_slash_name;
@@ -14,6 +15,7 @@ use crate::bottom_pane::slash_commands::SlashCommandItem;
 use crate::bottom_pane::slash_commands::find_slash_command;
 use crate::goal_display::GOAL_USAGE;
 use crate::goal_files::GoalDraft;
+use crate::tui_contributions::PluginSlashCommand;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum SlashCommandDispatchSource {
@@ -63,6 +65,20 @@ impl ChatWidget {
             return;
         }
         self.toggle_service_tier_from_ui(command);
+        self.bottom_pane.record_pending_slash_command_history();
+    }
+
+    pub(super) fn handle_plugin_slash_command_dispatch(&mut self, command: PluginSlashCommand) {
+        let history_record = UserMessageHistoryRecord::Override(UserMessageHistoryOverride {
+            text: String::new(),
+            text_elements: Vec::new(),
+        });
+        self.queue_user_message_with_options_and_history_record(
+            UserMessage::from(command.submit_prompt),
+            QueuedInputAction::Plain,
+            Vec::new(),
+            history_record,
+        );
         self.bottom_pane.record_pending_slash_command_history();
     }
 
@@ -936,9 +952,12 @@ impl ChatWidget {
         }
 
         let service_tier_commands = self.current_model_service_tier_commands();
-        let Some(command) =
-            find_slash_command(name, self.builtin_command_flags(), &service_tier_commands)
-        else {
+        let Some(command) = find_slash_command(
+            name,
+            self.builtin_command_flags(),
+            &service_tier_commands,
+            &self.plugin_slash_commands,
+        ) else {
             self.add_info_message(
                 format!(
                     r#"Unrecognized command '/{name}'. Type "/" for a list of supported commands."#
@@ -957,6 +976,10 @@ impl ChatWidget {
                 SlashCommandItem::ServiceTier(command) => {
                     self.handle_service_tier_command_dispatch(command);
                     QueueDrain::Continue
+                }
+                SlashCommandItem::Plugin(command) => {
+                    self.handle_plugin_slash_command_dispatch(command);
+                    QueueDrain::Stop
                 }
             };
         }

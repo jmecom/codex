@@ -9,6 +9,7 @@ use codex_utils_fuzzy_match::fuzzy_match;
 
 use crate::slash_command::SlashCommand;
 use crate::slash_command::built_in_slash_commands;
+use crate::tui_contributions::PluginSlashCommand;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct ServiceTierCommand {
@@ -21,6 +22,7 @@ pub(crate) struct ServiceTierCommand {
 pub(crate) enum SlashCommandItem {
     Builtin(SlashCommand),
     ServiceTier(ServiceTierCommand),
+    Plugin(PluginSlashCommand),
 }
 
 impl SlashCommandItem {
@@ -28,6 +30,7 @@ impl SlashCommandItem {
         match self {
             Self::Builtin(cmd) => cmd.command(),
             Self::ServiceTier(command) => &command.name,
+            Self::Plugin(command) => &command.name,
         }
     }
 
@@ -35,6 +38,7 @@ impl SlashCommandItem {
         match self {
             Self::Builtin(cmd) => cmd.supports_inline_args(),
             Self::ServiceTier(_) => false,
+            Self::Plugin(_) => false,
         }
     }
 
@@ -42,6 +46,7 @@ impl SlashCommandItem {
         match self {
             Self::Builtin(cmd) => cmd.available_in_side_conversation(),
             Self::ServiceTier(_) => false,
+            Self::Plugin(_) => true,
         }
     }
 
@@ -49,6 +54,7 @@ impl SlashCommandItem {
         match self {
             Self::Builtin(cmd) => cmd.available_during_task(),
             Self::ServiceTier(_) => true,
+            Self::Plugin(_) => true,
         }
     }
 }
@@ -84,6 +90,7 @@ pub(crate) fn builtins_for_input(flags: BuiltinCommandFlags) -> Vec<(&'static st
 pub(crate) fn commands_for_input(
     flags: BuiltinCommandFlags,
     service_tier_commands: &[ServiceTierCommand],
+    plugin_slash_commands: &[PluginSlashCommand],
 ) -> Vec<SlashCommandItem> {
     let mut commands = Vec::new();
     let tiers_enabled = flags.service_tier_commands_enabled;
@@ -96,6 +103,11 @@ pub(crate) fn commands_for_input(
                     .cloned()
                     .map(SlashCommandItem::ServiceTier),
             );
+        }
+    }
+    for command in plugin_slash_commands {
+        if !commands.iter().any(|item| item.command() == command.name) {
+            commands.push(SlashCommandItem::Plugin(command.clone()));
         }
     }
     commands
@@ -129,6 +141,7 @@ pub(crate) fn find_slash_command(
     name: &str,
     flags: BuiltinCommandFlags,
     service_tier_commands: &[ServiceTierCommand],
+    plugin_slash_commands: &[PluginSlashCommand],
 ) -> Option<SlashCommandItem> {
     if let Some(cmd) = find_builtin_command(name, flags) {
         return Some(SlashCommandItem::Builtin(cmd));
@@ -144,14 +157,22 @@ pub(crate) fn find_slash_command(
                 .map(SlashCommandItem::ServiceTier)
         })
         .flatten()
+        .or_else(|| {
+            plugin_slash_commands
+                .iter()
+                .find(|command| command.name == name)
+                .cloned()
+                .map(SlashCommandItem::Plugin)
+        })
 }
 
 pub(crate) fn has_slash_command_prefix(
     name: &str,
     flags: BuiltinCommandFlags,
     service_tier_commands: &[ServiceTierCommand],
+    plugin_slash_commands: &[PluginSlashCommand],
 ) -> bool {
-    commands_for_input(flags, service_tier_commands)
+    commands_for_input(flags, service_tier_commands, plugin_slash_commands)
         .into_iter()
         .any(|command| fuzzy_match(command.command(), name).is_some())
 }
@@ -224,7 +245,7 @@ mod tests {
             description: "fastest inference".to_string(),
         }];
 
-        assert_eq!(find_slash_command("fast", flags, &commands), None);
+        assert_eq!(find_slash_command("fast", flags, &commands, &[]), None);
     }
 
     #[test]
@@ -242,7 +263,7 @@ mod tests {
             },
         ];
 
-        let items = commands_for_input(all_enabled_flags(), &commands);
+        let items = commands_for_input(all_enabled_flags(), &commands, &[]);
         let model_idx = items
             .iter()
             .position(|item| matches!(item, SlashCommandItem::Builtin(SlashCommand::Model)))
@@ -340,8 +361,52 @@ mod tests {
         };
 
         assert_eq!(
-            find_slash_command("fast", flags, from_ref(&command)),
+            find_slash_command("fast", flags, from_ref(&command), &[]),
             Some(SlashCommandItem::ServiceTier(command))
+        );
+    }
+
+    #[test]
+    fn plugin_commands_are_exposed_after_builtin_commands() {
+        let command = PluginSlashCommand {
+            plugin_id: "demo@test".to_string(),
+            name: "piplan".to_string(),
+            description: "Plan with plugin context".to_string(),
+            submit_prompt: "Make a plan.".to_string(),
+        };
+
+        let items = commands_for_input(all_enabled_flags(), &[], from_ref(&command));
+
+        assert_eq!(items.last(), Some(&SlashCommandItem::Plugin(command)));
+    }
+
+    #[test]
+    fn plugin_commands_do_not_override_builtin_commands() {
+        let command = PluginSlashCommand {
+            plugin_id: "demo@test".to_string(),
+            name: "model".to_string(),
+            description: "Model override".to_string(),
+            submit_prompt: "Pick a model.".to_string(),
+        };
+
+        assert_eq!(
+            find_slash_command("model", all_enabled_flags(), &[], from_ref(&command)),
+            Some(SlashCommandItem::Builtin(SlashCommand::Model))
+        );
+    }
+
+    #[test]
+    fn plugin_commands_resolve_by_name() {
+        let command = PluginSlashCommand {
+            plugin_id: "demo@test".to_string(),
+            name: "piplan".to_string(),
+            description: "Plan with plugin context".to_string(),
+            submit_prompt: "Make a plan.".to_string(),
+        };
+
+        assert_eq!(
+            find_slash_command("piplan", all_enabled_flags(), &[], from_ref(&command)),
+            Some(SlashCommandItem::Plugin(command))
         );
     }
 }

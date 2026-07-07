@@ -323,6 +323,8 @@ use crate::status_indicator_widget::STATUS_DETAILS_DEFAULT_MAX_LINES;
 use crate::status_indicator_widget::StatusDetailsCapitalization;
 use crate::text_formatting::truncate_text;
 use crate::tui::FrameRequester;
+use crate::tui_contributions::PluginSlashCommand;
+use crate::tui_contributions::TuiContributionSet;
 mod command_lifecycle;
 mod connectors;
 mod constructor;
@@ -504,6 +506,7 @@ pub(crate) struct ChatWidgetInit {
     // Shared latch so we only warn once about invalid terminal-title item IDs.
     pub(crate) terminal_title_invalid_items_warned: Arc<AtomicBool>,
     pub(crate) session_telemetry: SessionTelemetry,
+    pub(crate) tui_contributions: TuiContributionSet,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -618,6 +621,7 @@ pub(crate) struct ChatWidget {
     plugin_install_auth_flow: Option<PluginInstallAuthFlowState>,
     plugins_active_tab_id: Option<String>,
     newly_installed_marketplace_tab_id: Option<String>,
+    plugin_slash_commands: Vec<PluginSlashCommand>,
     // Queue of interruptive UI events deferred during an active write cycle
     interrupts: InterruptManager,
     // Accumulates the current reasoning block text to extract a header
@@ -651,8 +655,11 @@ pub(crate) struct ChatWidget {
     forked_from: Option<ThreadId>,
     interrupted_turn_notice_mode: InterruptedTurnNoticeMode,
     frame_requester: FrameRequester,
+    // Whether startup should render the session header banner at all.
+    show_splash_banner: bool,
     // Whether to include the initial welcome banner on session configured
     show_welcome_banner: bool,
+    show_announcement_tip: bool,
     // One-shot tooltip override for the primary startup session.
     startup_tooltip_override: Option<String>,
     // When resuming an existing session (selected via resume picker), avoid an

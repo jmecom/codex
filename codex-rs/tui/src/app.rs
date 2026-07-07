@@ -508,6 +508,7 @@ pub(crate) struct App {
     workspace_command_runner: Option<WorkspaceCommandRunner>,
     /// Config is stored here so we can recreate ChatWidgets as needed.
     pub(crate) config: Config,
+    tui_contributions: crate::tui_contributions::TuiContributionSet,
     pub(crate) state_db: Option<StateDbHandle>,
     cli_kv_overrides: Vec<(String, TomlValue)>,
     harness_overrides: ConfigOverrides,
@@ -752,6 +753,7 @@ impl App {
             status_line_invalid_items_warned: self.status_line_invalid_items_warned.clone(),
             terminal_title_invalid_items_warned: self.terminal_title_invalid_items_warned.clone(),
             session_telemetry: self.session_telemetry.clone(),
+            tui_contributions: self.tui_contributions.clone(),
         }
     }
 
@@ -805,6 +807,24 @@ impl App {
                 &cli_kv_overrides,
                 &harness_overrides,
             );
+        }
+        let tui_contributions =
+            crate::tui_contributions::TuiContributionSet::load_enabled_plugins(&config).await;
+        tui_contributions.apply_to_config(&mut config);
+        if let Some(theme) = tui_contributions.theme.as_ref() {
+            match theme.source {
+                crate::tui_contributions::PluginThemeSource::Ghostty => {
+                    if let Err(err) =
+                        crate::ghostty_theme_sync::sync_theme_from_ghostty(&mut config, theme).await
+                    {
+                        let message = format!("Ghostty theme sync failed: {err}");
+                        tracing::warn!("{message}");
+                        app_event_tx.send(AppEvent::InsertHistoryCell(Box::new(
+                            history_cell::new_warning_event(message),
+                        )));
+                    }
+                }
+            }
         }
         let mut model = config.model.clone().unwrap_or(bootstrap.default_model);
         let available_models = bootstrap.available_models;
@@ -890,9 +910,12 @@ impl App {
             SessionSelection::StartFresh | SessionSelection::Exit => {
                 spawn_startup_thread_start(&app_server, config.clone(), app_event_tx.clone());
                 // Count a startup tooltip once the initial chat widget can render it.
-                let startup_tooltip_override =
+                let startup_tooltip_override = if tui_contributions.show_announcement_tip() {
                     prepare_startup_tooltip_override(&mut config, &available_models, is_first_run)
-                        .await;
+                        .await
+                } else {
+                    None
+                };
                 let init = crate::chatwidget::ChatWidgetInit {
                     config: config.clone(),
                     frame_requester: tui.frame_requester(),
@@ -919,6 +942,7 @@ impl App {
                     terminal_title_invalid_items_warned: terminal_title_invalid_items_warned
                         .clone(),
                     session_telemetry: session_telemetry.clone(),
+                    tui_contributions: tui_contributions.clone(),
                 };
                 let mut chat_widget = ChatWidget::new_with_app_event(init);
                 chat_widget.set_queue_submissions_until_session_configured(/*queue*/ true);
@@ -955,6 +979,7 @@ impl App {
                     terminal_title_invalid_items_warned: terminal_title_invalid_items_warned
                         .clone(),
                     session_telemetry: session_telemetry.clone(),
+                    tui_contributions: tui_contributions.clone(),
                 };
                 (ChatWidget::new_with_app_event(init), Some(resumed))
             }
@@ -994,6 +1019,7 @@ impl App {
                     terminal_title_invalid_items_warned: terminal_title_invalid_items_warned
                         .clone(),
                     session_telemetry: session_telemetry.clone(),
+                    tui_contributions: tui_contributions.clone(),
                 };
                 (ChatWidget::new_with_app_event(init), Some(forked))
             }
@@ -1021,6 +1047,7 @@ See the Codex keymap documentation for supported actions and examples."
             chat_widget,
             workspace_command_runner: Some(workspace_command_runner),
             config,
+            tui_contributions,
             state_db,
             cli_kv_overrides,
             harness_overrides,

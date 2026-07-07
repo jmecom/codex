@@ -16,6 +16,7 @@ use super::slash_commands::commands_for_input;
 use crate::render::Insets;
 use crate::render::RectExt;
 use crate::slash_command::SlashCommand;
+use crate::tui_contributions::PluginSlashCommand;
 
 // Hide alias commands in the default popup list so each unique action appears once.
 // `quit` is an alias of `exit`, and `btw` is an alias of `side`, so we skip
@@ -31,6 +32,7 @@ const COMMAND_COLUMN_WIDTH: ColumnWidthConfig = ColumnWidthConfig::new(
 pub(crate) enum CommandItem {
     Builtin(SlashCommand),
     ServiceTier(ServiceTierCommand),
+    Plugin(PluginSlashCommand),
 }
 
 pub(crate) struct CommandPopup {
@@ -69,20 +71,33 @@ impl From<CommandPopupFlags> for BuiltinCommandFlags {
 }
 
 impl CommandPopup {
+    #[cfg(test)]
     pub(crate) fn new(
         flags: CommandPopupFlags,
         service_tier_commands: Vec<ServiceTierCommand>,
     ) -> Self {
+        Self::new_with_plugin_commands(flags, service_tier_commands, Vec::new())
+    }
+
+    pub(crate) fn new_with_plugin_commands(
+        flags: CommandPopupFlags,
+        service_tier_commands: Vec<ServiceTierCommand>,
+        plugin_slash_commands: Vec<PluginSlashCommand>,
+    ) -> Self {
         // Keep built-in availability in sync with the composer.
-        let commands = commands_for_input(flags.into(), &service_tier_commands)
-            .into_iter()
-            .filter_map(|command| match command {
-                SlashCommandItem::Builtin(cmd) => (!cmd.command().starts_with("debug")
-                    && cmd != SlashCommand::Apps)
-                    .then_some(CommandItem::Builtin(cmd)),
-                SlashCommandItem::ServiceTier(command) => Some(CommandItem::ServiceTier(command)),
-            })
-            .collect();
+        let commands =
+            commands_for_input(flags.into(), &service_tier_commands, &plugin_slash_commands)
+                .into_iter()
+                .filter_map(|command| match command {
+                    SlashCommandItem::Builtin(cmd) => (!cmd.command().starts_with("debug")
+                        && cmd != SlashCommand::Apps)
+                        .then_some(CommandItem::Builtin(cmd)),
+                    SlashCommandItem::ServiceTier(command) => {
+                        Some(CommandItem::ServiceTier(command))
+                    }
+                    SlashCommandItem::Plugin(command) => Some(CommandItem::Plugin(command)),
+                })
+                .collect();
         Self {
             command_filter: String::new(),
             commands,
@@ -250,6 +265,7 @@ impl CommandItem {
         match self {
             Self::Builtin(cmd) => cmd.command(),
             Self::ServiceTier(command) => &command.name,
+            Self::Plugin(command) => &command.name,
         }
     }
 
@@ -257,6 +273,7 @@ impl CommandItem {
         match self {
             Self::Builtin(cmd) => cmd.description(),
             Self::ServiceTier(command) => &command.description,
+            Self::Plugin(command) => &command.description,
         }
     }
 }
@@ -296,6 +313,7 @@ mod tests {
         let has_init = matches.iter().any(|item| match item {
             CommandItem::Builtin(cmd) => cmd.command() == "init",
             CommandItem::ServiceTier(_) => false,
+            CommandItem::Plugin(_) => false,
         });
         assert!(
             has_init,
@@ -316,6 +334,9 @@ mod tests {
             Some(CommandItem::ServiceTier(command)) => {
                 panic!("expected init command, got service tier {command:?}")
             }
+            Some(CommandItem::Plugin(command)) => {
+                panic!("expected init command, got plugin command {command:?}")
+            }
             None => panic!("expected a selected command for exact match"),
         }
     }
@@ -329,6 +350,9 @@ mod tests {
             Some(CommandItem::Builtin(cmd)) => assert_eq!(cmd.command(), "model"),
             Some(CommandItem::ServiceTier(command)) => {
                 panic!("expected model command, got service tier {command:?}")
+            }
+            Some(CommandItem::Plugin(command)) => {
+                panic!("expected model command, got plugin command {command:?}")
             }
             None => panic!("expected at least one match for '/mo'"),
         }
@@ -375,10 +399,7 @@ mod tests {
         let cmds: Vec<String> = popup
             .filtered_items()
             .into_iter()
-            .map(|item| match item {
-                CommandItem::Builtin(cmd) => cmd.command().to_string(),
-                CommandItem::ServiceTier(command) => command.name,
-            })
+            .map(|item| item.command().to_string())
             .collect();
         assert_eq!(
             cmds,
@@ -431,6 +452,34 @@ mod tests {
     }
 
     #[test]
+    fn plugin_command_popup_items_snapshot() {
+        let mut popup = CommandPopup::new_with_plugin_commands(
+            CommandPopupFlags::default(),
+            Vec::new(),
+            vec![PluginSlashCommand {
+                plugin_id: "demo@test".to_string(),
+                name: "piplan".to_string(),
+                description: "Plan with project context".to_string(),
+                submit_prompt: "Make a plan before editing.".to_string(),
+            }],
+        );
+        popup.on_composer_text_change("/pi".to_string());
+
+        let commands = popup
+            .filtered_items()
+            .into_iter()
+            .map(|item| {
+                let command = item.command();
+                let description = item.description();
+                format!("/{command} - {description}")
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        insta::assert_snapshot!("command_popup_plugin_items", commands);
+    }
+
+    #[test]
     fn prefix_filter_limits_matches_for_ac() {
         let mut popup = CommandPopup::new(CommandPopupFlags::default(), Vec::new());
         popup.on_composer_text_change("/ac".to_string());
@@ -438,10 +487,7 @@ mod tests {
         let cmds: Vec<String> = popup
             .filtered_items()
             .into_iter()
-            .map(|item| match item {
-                CommandItem::Builtin(cmd) => cmd.command().to_string(),
-                CommandItem::ServiceTier(command) => command.name,
-            })
+            .map(|item| item.command().to_string())
             .collect();
         assert!(
             !cmds.iter().any(|cmd| cmd == "compact"),
@@ -513,10 +559,7 @@ mod tests {
         let cmds: Vec<String> = popup
             .filtered_items()
             .into_iter()
-            .map(|item| match item {
-                CommandItem::Builtin(cmd) => cmd.command().to_string(),
-                CommandItem::ServiceTier(command) => command.name,
-            })
+            .map(|item| item.command().to_string())
             .collect();
         assert!(
             !cmds.iter().any(|cmd| cmd == "plan"),
@@ -547,6 +590,9 @@ mod tests {
             Some(CommandItem::ServiceTier(command)) => {
                 panic!("expected plan command, got service tier {command:?}")
             }
+            Some(CommandItem::Plugin(command)) => {
+                panic!("expected plan command, got plugin command {command:?}")
+            }
             other => panic!("expected plan to be selected for exact match, got {other:?}"),
         }
     }
@@ -572,10 +618,7 @@ mod tests {
         let cmds: Vec<String> = popup
             .filtered_items()
             .into_iter()
-            .map(|item| match item {
-                CommandItem::Builtin(cmd) => cmd.command().to_string(),
-                CommandItem::ServiceTier(command) => command.name,
-            })
+            .map(|item| item.command().to_string())
             .collect();
         assert!(
             !cmds.iter().any(|cmd| cmd == "personality"),
@@ -606,6 +649,9 @@ mod tests {
             Some(CommandItem::ServiceTier(command)) => {
                 panic!("expected personality command, got service tier {command:?}")
             }
+            Some(CommandItem::Plugin(command)) => {
+                panic!("expected personality command, got plugin command {command:?}")
+            }
             other => panic!("expected personality to be selected for exact match, got {other:?}"),
         }
     }
@@ -616,10 +662,7 @@ mod tests {
         let cmds: Vec<String> = popup
             .filtered_items()
             .into_iter()
-            .map(|item| match item {
-                CommandItem::Builtin(cmd) => cmd.command().to_string(),
-                CommandItem::ServiceTier(command) => command.name,
-            })
+            .map(|item| item.command().to_string())
             .collect();
 
         assert!(

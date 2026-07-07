@@ -21,6 +21,7 @@ pub(super) async fn make_test_app() -> App {
         session_telemetry,
         app_event_tx,
         chat_widget,
+        tui_contributions: crate::tui_contributions::TuiContributionSet::default(),
         workspace_command_runner: None,
         config,
         state_db: None,

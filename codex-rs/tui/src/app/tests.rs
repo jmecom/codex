@@ -338,6 +338,7 @@ async fn enqueue_primary_thread_session_replays_turns_before_initial_prompt_subm
         startup_tooltip_override: None,
         status_line_invalid_items_warned: app.status_line_invalid_items_warned.clone(),
         terminal_title_invalid_items_warned: app.terminal_title_invalid_items_warned.clone(),
+        tui_contributions: crate::tui_contributions::TuiContributionSet::default(),
         session_telemetry: app.session_telemetry.clone(),
     });
 
@@ -4060,6 +4061,7 @@ async fn make_test_app() -> App {
         chat_widget,
         workspace_command_runner: None,
         config,
+        tui_contributions: crate::tui_contributions::TuiContributionSet::default(),
         state_db: None,
         cli_kv_overrides: Vec::new(),
         harness_overrides: ConfigOverrides::default(),
@@ -4125,6 +4127,7 @@ async fn make_test_app_with_channels() -> (
             chat_widget,
             workspace_command_runner: None,
             config,
+            tui_contributions: crate::tui_contributions::TuiContributionSet::default(),
             state_db: None,
             cli_kv_overrides: Vec::new(),
             harness_overrides: ConfigOverrides::default(),
@@ -5404,6 +5407,7 @@ async fn replace_chat_widget_reseeds_collab_agent_metadata_for_replay() {
         status_line_invalid_items_warned: app.status_line_invalid_items_warned.clone(),
         terminal_title_invalid_items_warned: app.terminal_title_invalid_items_warned.clone(),
         session_telemetry: app.session_telemetry.clone(),
+        tui_contributions: crate::tui_contributions::TuiContributionSet::default(),
     });
     app.replace_chat_widget(replacement);
 

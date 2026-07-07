@@ -442,6 +442,7 @@ async fn configured_pet_load_is_deferred_until_after_construction() {
         status_line_invalid_items_warned: Arc::new(AtomicBool::new(false)),
         terminal_title_invalid_items_warned: Arc::new(AtomicBool::new(false)),
         session_telemetry,
+        tui_contributions: crate::tui_contributions::TuiContributionSet::default(),
     };
 
     let chat = ChatWidget::new_with_app_event(init);
@@ -458,6 +459,51 @@ async fn configured_pet_load_is_deferred_until_after_construction() {
             assert!(result.unwrap().is_some());
         }
     );
+}
+
+#[tokio::test]
+async fn plugin_startup_settings_do_not_seed_placeholder_header() {
+    let (tx_raw, _rx) = unbounded_channel::<AppEvent>();
+    let tx = AppEventSender::new(tx_raw);
+    let cfg = test_config().await;
+    let resolved_model = get_model_offline_for_tests(cfg.model.as_deref());
+    let session_telemetry = test_session_telemetry(&cfg, resolved_model.as_str());
+    let init = ChatWidgetInit {
+        config: cfg.clone(),
+        frame_requester: FrameRequester::test_dummy(),
+        app_event_tx: tx,
+        workspace_command_runner: None,
+        initial_user_message: None,
+        enhanced_keys_supported: false,
+        has_chatgpt_account: false,
+        has_codex_backend_auth: false,
+        model_catalog: test_model_catalog(&cfg),
+        feedback: codex_feedback::CodexFeedback::new(),
+        is_first_run: true,
+        status_account_display: None,
+        runtime_model_provider_base_url: None,
+        initial_plan_type: None,
+        model: Some(resolved_model),
+        startup_tooltip_override: Some("Announcement tip".to_string()),
+        status_line_invalid_items_warned: Arc::new(AtomicBool::new(false)),
+        terminal_title_invalid_items_warned: Arc::new(AtomicBool::new(false)),
+        session_telemetry,
+        tui_contributions: crate::tui_contributions::TuiContributionSet {
+            startup: crate::tui_contributions::StartupUiContribution {
+                splash_banner: Some(crate::tui_contributions::StartupElementVisibility::Hidden),
+                announcement_tip: Some(crate::tui_contributions::StartupElementVisibility::Hidden),
+            },
+            ..Default::default()
+        },
+    };
+
+    let chat = ChatWidget::new_with_app_event(init);
+
+    assert!(chat.transcript.active_cell.is_none());
+    assert!(!chat.show_splash_banner);
+    assert!(!chat.show_welcome_banner);
+    assert!(!chat.show_announcement_tip);
+    assert!(chat.startup_tooltip_override.is_none());
 }
 
 #[tokio::test]
@@ -2983,6 +3029,43 @@ async fn session_configured_clears_goal_status_footer() {
 
     assert_eq!(chat.current_goal_status_indicator, None);
     assert!(chat.turn_lifecycle.budget_limited_turn_ids.is_empty());
+}
+
+#[tokio::test]
+async fn plugin_startup_settings_hide_banner_and_tip_after_session_configured() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.4")).await;
+    chat.show_splash_banner = false;
+    chat.show_welcome_banner = false;
+    chat.show_announcement_tip = false;
+    chat.startup_tooltip_override = Some("Announcement tip".to_string());
+
+    let rollout_file = NamedTempFile::new().unwrap();
+    chat.handle_thread_session(crate::session_state::ThreadSessionState {
+        thread_id: ThreadId::new(),
+        forked_from_id: None,
+        fork_parent_title: None,
+        thread_name: None,
+        model: "gpt-5.4".to_string(),
+        model_provider_id: "test-provider".to_string(),
+        service_tier: None,
+        approval_policy: AskForApproval::Never,
+        approvals_reviewer: ApprovalsReviewer::User,
+        permission_profile: PermissionProfile::read_only(),
+        active_permission_profile: None,
+        cwd: test_path_buf("/tmp/project").abs(),
+        runtime_workspace_roots: Vec::new(),
+        instruction_source_paths: Vec::new(),
+        reasoning_effort: Some(ReasoningEffortConfig::default()),
+        collaboration_mode: None,
+        personality: None,
+        message_history: None,
+        network_proxy: None,
+        rollout_path: Some(rollout_file.path().to_path_buf()),
+    });
+
+    let cells = drain_insert_history(&mut rx);
+    assert!(cells.is_empty());
+    assert!(chat.transcript.active_cell.is_none());
 }
 
 #[tokio::test]

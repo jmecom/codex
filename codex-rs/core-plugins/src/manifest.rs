@@ -41,6 +41,8 @@ struct RawPluginManifest {
     #[serde(default)]
     hooks: Option<RawPluginManifestHooks>,
     #[serde(default)]
+    tui: Option<String>,
+    #[serde(default)]
     interface: Option<RawPluginManifestInterface>,
 }
 
@@ -166,6 +168,7 @@ pub(crate) fn parse_plugin_manifest_uri(
         mcp_servers,
         apps,
         hooks,
+        tui,
         interface,
     } = serde_json::from_str::<RawPluginManifest>(contents)?;
     let name = plugin_root
@@ -262,6 +265,7 @@ pub(crate) fn parse_plugin_manifest_uri(
             mcp_servers: resolve_manifest_mcp_servers(plugin_root, mcp_servers),
             apps: resolve_manifest_path(plugin_root, "apps", apps.as_deref()),
             hooks: resolve_manifest_hooks(plugin_root, hooks),
+            tui: resolve_manifest_path(plugin_root, "tui", tui.as_deref()),
         },
         interface,
     })
@@ -838,6 +842,7 @@ mod tests {
   "mcpServers": "./.mcp.json",
   "apps": "./apps",
   "hooks": "./hooks.json",
+  "tui": "./tui.json",
   "interface": {
     "displayName": "Demo Plugin",
     "composerIcon": "./assets/icon.svg"
@@ -862,6 +867,7 @@ mod tests {
                     hooks: Some(PluginManifestHooks::Paths(vec![
                         plugin_root.join("hooks.json").expect("hooks URI"),
                     ])),
+                    tui: Some(plugin_root.join("tui.json").expect("tui URI")),
                 },
                 interface: Some(PluginManifestInterface {
                     display_name: Some("Demo Plugin".to_string()),
