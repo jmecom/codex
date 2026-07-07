@@ -1,9 +1,7 @@
 {
   "statusLine": [
-    "run-state",
     "model-with-reasoning",
     "git-branch",
-    "context-remaining",
     "current-dir"
   ],
   "layout": {
