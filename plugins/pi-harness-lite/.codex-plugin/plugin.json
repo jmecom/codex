@@ -9,7 +9,7 @@
   "interface": {
     "displayName": "Pi Harness Lite",
     "shortDescription": "Changes Codex startup chrome, theme, diffs, status line, and history search.",
-    "longDescription": "Pi Harness Lite demonstrates Codex TUI plugin hooks with a quiet startup, Ghostty theme sync, a focused last-changed-file diff view, a minimal footer, a status line focused on model, git branch, and current directory, and a Ctrl+R fzf-backed conversation history search.",
+    "longDescription": "Pi Harness Lite demonstrates Codex TUI plugin hooks with a quiet startup, Ghostty theme sync, a focused last-changed-file diff view, a minimal footer, a status line focused on model, git branch, and current directory, and a Ctrl+R fzf-backed project history search.",
     "developerName": "jmecom",
     "category": "Productivity",
     "capabilities": [
