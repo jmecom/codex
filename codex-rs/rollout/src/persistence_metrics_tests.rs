@@ -241,7 +241,7 @@ fn invalid_turn_boundaries_reset_partial_measurements() {
 }
 
 #[test]
-fn filtered_item_completion_includes_its_nested_item_type() {
+fn item_completion_persistence_depends_on_history_mode() {
     let item = RolloutItem::EventMsg(EventMsg::ItemCompleted(ItemCompletedEvent {
         thread_id: ThreadId::default(),
         turn_id: "turn".to_string(),
@@ -253,32 +253,19 @@ fn filtered_item_completion_includes_its_nested_item_type() {
         completed_at_ms: 0,
     }));
 
-    let (_, measurement) = measure_and_filter_rollout_items(&[item], ThreadHistoryMode::Legacy);
+    let (_, legacy_measurement) =
+        measure_and_filter_rollout_items(std::slice::from_ref(&item), ThreadHistoryMode::Legacy);
 
     assert_eq!(
-        measurement.items[0].rollout_item_type,
+        legacy_measurement.items[0].rollout_item_type,
         "event.item_completed.user_message"
     );
     assert_eq!(
-        measurement.items[0].decision,
+        legacy_measurement.items[0].decision,
         super::PersistenceDecision::Dropped
     );
-}
 
-#[test]
-fn paginated_item_completion_is_persisted() {
-    let item = RolloutItem::EventMsg(EventMsg::ItemCompleted(ItemCompletedEvent {
-        thread_id: ThreadId::default(),
-        turn_id: "turn".to_string(),
-        item: TurnItem::UserMessage(UserMessageItem {
-            id: "item".to_string(),
-            client_id: None,
-            content: Vec::new(),
-        }),
-        completed_at_ms: 0,
-    }));
-
-    let (persisted, measurement) =
+    let (persisted, paginated_measurement) =
         measure_and_filter_rollout_items(std::slice::from_ref(&item), ThreadHistoryMode::Paginated);
 
     assert_eq!(
@@ -286,7 +273,7 @@ fn paginated_item_completion_is_persisted() {
         serde_json::to_value([item]).expect("serialize expected items")
     );
     assert_eq!(
-        measurement.items[0].decision,
+        paginated_measurement.items[0].decision,
         super::PersistenceDecision::Kept
     );
 }

@@ -183,14 +183,6 @@ fn should_persist_legacy_event_msg(ev: &EventMsg) -> bool {
 fn should_persist_paginated_event_msg(ev: &EventMsg) -> bool {
     match ev {
         EventMsg::ItemCompleted(_) => true,
-        EventMsg::TokenCount(_)
-        | EventMsg::ThreadGoalUpdated(_)
-        | EventMsg::EnteredReviewMode(_)
-        | EventMsg::ExitedReviewMode(_)
-        | EventMsg::ThreadRolledBack(_)
-        | EventMsg::TurnAborted(_)
-        | EventMsg::TurnStarted(_)
-        | EventMsg::TurnComplete(_) => true,
         EventMsg::UserMessage(_)
         | EventMsg::AgentMessage(_)
         | EventMsg::AgentReasoning(_)
