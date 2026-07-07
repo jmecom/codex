@@ -871,11 +871,14 @@ impl ModelClient {
                 reasoning_summary_delivery: codex_api::ReasoningSummaryDelivery::SequentialCutoff,
             });
         let reasoning = Self::build_reasoning(model_info, effort, summary);
-        let include = if reasoning.is_some() {
+        let mut include = if reasoning.is_some() {
             vec!["reasoning.encrypted_content".to_string()]
         } else {
             Vec::new()
         };
+        if is_openai {
+            include.push("web_search_call.action.sources".to_string());
+        }
         let verbosity = if model_info.support_verbosity {
             self.state.model_verbosity.or(model_info.default_verbosity)
         } else {

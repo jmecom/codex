@@ -18,11 +18,13 @@ use codex_login::default_client::build_reqwest_client;
 use codex_model_provider::SharedModelProvider;
 use codex_protocol::items::WebSearchItem;
 use codex_protocol::models::WebSearchAction;
+use codex_protocol::models::WebSearchSource;
 use codex_tools::ResponsesApiNamespace;
 use codex_tools::ResponsesApiNamespaceTool;
 use codex_tools::ToolExposure;
 use codex_tools::default_namespace_description;
 use http::HeaderMap;
+use std::collections::HashSet;
 use url::Url;
 
 use crate::history::recent_input;
@@ -32,6 +34,7 @@ use crate::schema::commands_schema;
 pub(crate) const WEB_NAMESPACE: &str = "web";
 pub(crate) const RUN_TOOL_NAME: &str = "run";
 const WEB_RUN_DESCRIPTION: &str = include_str!("../web_run_description.md");
+const MAX_SEARCH_SOURCES: usize = 20;
 
 pub(crate) struct WebSearchTool {
     pub(crate) session_id: String,
@@ -81,7 +84,7 @@ impl ToolExecutor<ToolCall> for WebSearchTool {
 impl WebSearchTool {
     async fn handle_call(&self, call: ToolCall) -> Result<Box<dyn ToolOutput>, FunctionCallError> {
         let commands = parse_commands(&call)?;
-        let command_action = command_action(&commands);
+        let mut command_action = command_action(&commands);
         let provider = self
             .provider
             .api_provider()
@@ -115,6 +118,10 @@ impl WebSearchTool {
             .search(&request, HeaderMap::new())
             .await
             .map_err(|err| FunctionCallError::Fatal(err.to_string()))?;
+        if let WebSearchAction::Search { sources, .. } = &mut command_action {
+            let output_sources = search_sources(&response.output);
+            *sources = (!output_sources.is_empty()).then_some(output_sources);
+        }
         call.turn_item_emitter
             .emit_completed(web_search_item(&call.call_id, command_action))
             .await;
@@ -168,12 +175,33 @@ fn query_action(queries: &[SearchQuery]) -> Option<WebSearchAction> {
         [query] => Some(WebSearchAction::Search {
             query: Some(query.q.clone()),
             queries: None,
+            sources: None,
         }),
         queries => Some(WebSearchAction::Search {
             query: None,
             queries: Some(queries.iter().map(|query| query.q.clone()).collect()),
+            sources: None,
         }),
     }
+}
+
+fn search_sources(output: &str) -> Vec<WebSearchSource> {
+    let mut urls = HashSet::new();
+    output
+        .lines()
+        .filter_map(|line| {
+            let (_, url) = line.rsplit_once(" (")?;
+            let url = url.strip_suffix(')')?;
+            let parsed = Url::parse(url).ok()?;
+            if !matches!(parsed.scheme(), "http" | "https") || !urls.insert(url) {
+                return None;
+            }
+            Some(WebSearchSource::Url {
+                url: url.to_string(),
+            })
+        })
+        .take(MAX_SEARCH_SOURCES)
+        .collect()
 }
 
 fn literal_url(ref_id: &str) -> Option<String> {
@@ -192,9 +220,12 @@ fn web_search_item(call_id: &str, action: WebSearchAction) -> ExtensionTurnItem 
 mod tests {
     use codex_api::SearchCommands;
     use codex_protocol::models::WebSearchAction;
+    use codex_protocol::models::WebSearchSource;
     use pretty_assertions::assert_eq;
 
+    use super::MAX_SEARCH_SOURCES;
     use super::command_action;
+    use super::search_sources;
 
     #[test]
     fn command_action_reports_queries_and_navigation_detail() {
@@ -204,6 +235,7 @@ mod tests {
                 WebSearchAction::Search {
                     query: None,
                     queries: Some(vec!["waterfalls".to_string(), "mountains".to_string()]),
+                    sources: None,
                 },
             ),
             (
@@ -237,5 +269,35 @@ mod tests {
                 serde_json::from_str(arguments).expect("valid search command arguments");
             assert_eq!(command_action(&commands), expected);
         }
+    }
+
+    #[test]
+    fn search_sources_extracts_unique_http_urls() {
+        assert_eq!(
+            search_sources(
+                r#"OpenAI docs (https://openai.com/docs)
+OpenAI docs (https://openai.com/docs)
+FTP mirror (ftp://example.com/archive)
+Example article (https://example.com/article)"#,
+            ),
+            vec![
+                WebSearchSource::Url {
+                    url: "https://openai.com/docs".to_string(),
+                },
+                WebSearchSource::Url {
+                    url: "https://example.com/article".to_string(),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn search_sources_are_bounded() {
+        let output = (0..=MAX_SEARCH_SOURCES)
+            .map(|index| format!("Result {index} (https://example{index}.com/article)"))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert_eq!(search_sources(&output).len(), MAX_SEARCH_SOURCES);
     }
 }

@@ -506,7 +506,7 @@ async fn web_search_marks_thread_memory_mode_polluted_when_configured() -> Resul
         &server,
         vec![responses::sse(vec![
             ev_response_created("resp-1"),
-            ev_web_search_call_done("ws-1", "completed", "weather seattle"),
+            ev_web_search_call_done("ws-1", "completed", "weather seattle", &[]),
             ev_completed("resp-1"),
         ])],
     )

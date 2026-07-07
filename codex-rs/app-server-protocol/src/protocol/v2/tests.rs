@@ -31,6 +31,7 @@ use codex_protocol::models::ImageDetail;
 use codex_protocol::models::MessagePhase;
 use codex_protocol::models::NetworkPermissions as CoreNetworkPermissions;
 use codex_protocol::models::WebSearchAction as CoreWebSearchAction;
+use codex_protocol::models::WebSearchSource as CoreWebSearchSource;
 use codex_protocol::permissions::FileSystemAccessMode as CoreFileSystemAccessMode;
 use codex_protocol::permissions::FileSystemPath as CoreFileSystemPath;
 use codex_protocol::permissions::FileSystemSandboxEntry as CoreFileSystemSandboxEntry;
@@ -2776,6 +2777,9 @@ fn core_turn_item_into_thread_item_converts_supported_variants() {
         action: CoreWebSearchAction::Search {
             query: Some("docs".to_string()),
             queries: None,
+            sources: Some(vec![CoreWebSearchSource::Url {
+                url: "https://openai.com/docs".to_string(),
+            }]),
         },
     });
 
@@ -2787,6 +2791,9 @@ fn core_turn_item_into_thread_item_converts_supported_variants() {
             action: Some(WebSearchAction::Search {
                 query: Some("docs".to_string()),
                 queries: None,
+                sources: Some(vec![WebSearchSource::Url {
+                    url: "https://openai.com/docs".to_string(),
+                }]),
             }),
         }
     );

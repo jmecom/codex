@@ -1502,8 +1502,11 @@ async fn chatgpt_auth_sends_correct_request() {
     );
     assert!(request_body["stream"].as_bool().unwrap());
     assert_eq!(
-        request_body["include"][0].as_str().unwrap(),
-        "reasoning.encrypted_content"
+        request_body["include"],
+        json!([
+            "reasoning.encrypted_content",
+            "web_search_call.action.sources",
+        ])
     );
 }
 
@@ -3040,6 +3043,7 @@ async fn azure_responses_request_includes_store_and_reasoning_ids() {
         action: Some(WebSearchAction::Search {
             query: Some("weather".into()),
             queries: None,
+            sources: None,
         }),
         internal_chat_message_metadata_passthrough: None,
     });

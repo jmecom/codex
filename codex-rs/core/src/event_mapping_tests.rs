@@ -492,6 +492,7 @@ fn parses_web_search_call() {
         action: Some(WebSearchAction::Search {
             query: Some("weather".to_string()),
             queries: None,
+            sources: None,
         }),
         internal_chat_message_metadata_passthrough: None,
     };
@@ -507,6 +508,7 @@ fn parses_web_search_call() {
                 action: WebSearchAction::Search {
                     query: Some("weather".to_string()),
                     queries: None,
+                    sources: None,
                 },
             }
         ),

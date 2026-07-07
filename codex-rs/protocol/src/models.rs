@@ -1670,6 +1670,12 @@ pub struct LocalShellExecAction {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema, TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
+pub enum WebSearchSource {
+    Url { url: String },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema, TS)]
+#[serde(tag = "type", rename_all = "snake_case")]
 #[schemars(rename = "ResponsesApiWebSearchAction")]
 pub enum WebSearchAction {
     Search {
@@ -1679,6 +1685,9 @@ pub enum WebSearchAction {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         queries: Option<Vec<String>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        sources: Option<Vec<WebSearchSource>>,
     },
     OpenPage {
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -3177,13 +3186,25 @@ mod tests {
                     "action": {
                         "type": "search",
                         "query": "weather seattle",
-                        "queries": ["weather seattle", "seattle weather now"]
+                        "queries": ["weather seattle", "seattle weather now"],
+                        "sources": [
+                            {"type": "url", "url": "https://weather.example/seattle"},
+                            {"type": "url", "url": "https://news.example/weather"}
+                        ]
                     }
                 }"#,
                 None,
                 Some(WebSearchAction::Search {
                     query: Some("weather seattle".into()),
                     queries: Some(vec!["weather seattle".into(), "seattle weather now".into()]),
+                    sources: Some(vec![
+                        WebSearchSource::Url {
+                            url: "https://weather.example/seattle".into(),
+                        },
+                        WebSearchSource::Url {
+                            url: "https://news.example/weather".into(),
+                        },
+                    ]),
                 }),
                 Some("completed".into()),
             ),

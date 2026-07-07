@@ -2442,6 +2442,7 @@ mod tests {
                 action: CoreWebSearchAction::Search {
                     query: Some("codex".into()),
                     queries: None,
+                    sources: None,
                 },
             }),
             EventMsg::ExecCommandEnd(ExecCommandEndEvent {
@@ -2498,6 +2499,7 @@ mod tests {
                 action: Some(WebSearchAction::Search {
                     query: Some("codex".into()),
                     queries: None,
+                    sources: None,
                 }),
             }
         );
@@ -3916,6 +3918,7 @@ mod tests {
                 action: CoreWebSearchAction::Search {
                     query: Some("codex".into()),
                     queries: None,
+                    sources: None,
                 },
             }),
         ));
@@ -3931,6 +3934,7 @@ mod tests {
                         action: Some(WebSearchAction::Search {
                             query: Some("codex".into()),
                             queries: None,
+                            sources: None,
                         }),
                     },
                 }],
@@ -4051,6 +4055,7 @@ mod tests {
                 action: CoreWebSearchAction::Search {
                     query: Some("codex".into()),
                     queries: None,
+                    sources: None,
                 },
             })),
         ]);
@@ -4066,6 +4071,7 @@ mod tests {
                         action: Some(WebSearchAction::Search {
                             query: Some("codex".into()),
                             queries: None,
+                            sources: None,
                         }),
                     },
                 }],

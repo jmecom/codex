@@ -9,6 +9,7 @@ use codex_protocol::items::AgentMessageContent;
 use codex_protocol::items::TurnItem;
 use codex_protocol::models::PermissionProfile;
 use codex_protocol::models::WebSearchAction;
+use codex_protocol::models::WebSearchSource;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::ItemCompletedEvent;
@@ -285,7 +286,12 @@ async fn web_search_item_is_emitted() -> anyhow::Result<()> {
     let TestCodex { codex, .. } = test_codex().build(&server).await?;
 
     let web_search_added = ev_web_search_call_added_partial("web-search-1", "in_progress");
-    let web_search_done = ev_web_search_call_done("web-search-1", "completed", "weather seattle");
+    let web_search_done = ev_web_search_call_done(
+        "web-search-1",
+        "completed",
+        "weather seattle",
+        &["https://weather.example/seattle"],
+    );
 
     let first_response = sse(vec![
         ev_response_created("resp-1"),
@@ -342,6 +348,9 @@ async fn web_search_item_is_emitted() -> anyhow::Result<()> {
         WebSearchAction::Search {
             query: Some("weather seattle".to_string()),
             queries: None,
+            sources: Some(vec![WebSearchSource::Url {
+                url: "https://weather.example/seattle".to_string(),
+            }]),
         }
     );
 

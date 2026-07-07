@@ -811,14 +811,18 @@ pub fn ev_web_search_call_added_partial(id: &str, status: &str) -> Value {
     })
 }
 
-pub fn ev_web_search_call_done(id: &str, status: &str, query: &str) -> Value {
+pub fn ev_web_search_call_done(id: &str, status: &str, query: &str, sources: &[&str]) -> Value {
+    let sources = sources
+        .iter()
+        .map(|url| serde_json::json!({"type": "url", "url": url}))
+        .collect::<Vec<_>>();
     serde_json::json!({
         "type": "response.output_item.done",
         "item": {
             "type": "web_search_call",
             "id": id,
             "status": status,
-            "action": {"type": "search", "query": query}
+            "action": {"type": "search", "query": query, "sources": sources}
         }
     })
 }

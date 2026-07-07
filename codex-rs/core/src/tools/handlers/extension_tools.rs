@@ -272,6 +272,7 @@ mod tests {
                 action: WebSearchAction::Search {
                     query: Some("rust trait object".to_string()),
                     queries: None,
+                    sources: None,
                 },
             });
             call.turn_item_emitter.emit_started(item.clone()).await;
@@ -437,6 +438,7 @@ mod tests {
             action: WebSearchAction::Search {
                 query: Some("rust trait object".to_string()),
                 queries: None,
+                sources: None,
             },
         };
         assert_eq!(started_item, expected);

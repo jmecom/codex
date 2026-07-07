@@ -787,10 +787,27 @@ impl TryFrom<GuardianApprovalReviewAction> for CoreGuardianAssessmentAction {
 #[serde(tag = "type", rename_all = "camelCase")]
 #[ts(tag = "type", rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
+pub enum WebSearchSource {
+    Url { url: String },
+}
+
+impl From<codex_protocol::models::WebSearchSource> for WebSearchSource {
+    fn from(value: codex_protocol::models::WebSearchSource) -> Self {
+        match value {
+            codex_protocol::models::WebSearchSource::Url { url } => Self::Url { url },
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(tag = "type", rename_all = "camelCase")]
+#[ts(tag = "type", rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
 pub enum WebSearchAction {
     Search {
         query: Option<String>,
         queries: Option<Vec<String>>,
+        sources: Option<Vec<WebSearchSource>>,
     },
     OpenPage {
         url: Option<String>,
@@ -806,9 +823,15 @@ pub enum WebSearchAction {
 impl From<codex_protocol::models::WebSearchAction> for WebSearchAction {
     fn from(value: codex_protocol::models::WebSearchAction) -> Self {
         match value {
-            codex_protocol::models::WebSearchAction::Search { query, queries } => {
-                WebSearchAction::Search { query, queries }
-            }
+            codex_protocol::models::WebSearchAction::Search {
+                query,
+                queries,
+                sources,
+            } => WebSearchAction::Search {
+                query,
+                queries,
+                sources: sources.map(|sources| sources.into_iter().map(Into::into).collect()),
+            },
             codex_protocol::models::WebSearchAction::OpenPage { url } => {
                 WebSearchAction::OpenPage { url }
             }

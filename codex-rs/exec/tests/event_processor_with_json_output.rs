@@ -368,6 +368,7 @@ fn web_search_completion_preserves_query_and_action() {
                 action: Some(ApiWebSearchAction::Search {
                     query: Some("rust async await".to_string()),
                     queries: None,
+                    sources: None,
                 }),
             },
             thread_id: "thread-1".to_string(),
@@ -388,6 +389,7 @@ fn web_search_completion_preserves_query_and_action() {
                         action: WebSearchAction::Search {
                             query: Some("rust async await".to_string()),
                             queries: None,
+                            sources: None,
                         },
                     }),
                 },
@@ -421,6 +423,7 @@ fn web_search_start_and_completion_reuse_item_id() {
                 action: Some(ApiWebSearchAction::Search {
                     query: Some("rust async await".to_string()),
                     queries: None,
+                    sources: None,
                 }),
             },
             thread_id: "thread-1".to_string(),
@@ -457,6 +460,7 @@ fn web_search_start_and_completion_reuse_item_id() {
                         action: WebSearchAction::Search {
                             query: Some("rust async await".to_string()),
                             queries: None,
+                            sources: None,
                         },
                     }),
                 },

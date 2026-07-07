@@ -1112,6 +1112,7 @@ fn web_search_history_cell_snapshot() {
         WebSearchAction::Search {
             query: Some(query),
             queries: None,
+            sources: None,
         },
     );
     let rendered = render_lines(&cell.display_lines(/*width*/ 64)).join("\n");
@@ -1154,6 +1155,7 @@ fn web_search_history_cell_wraps_with_indented_continuation() {
         WebSearchAction::Search {
             query: Some(query),
             queries: None,
+            sources: None,
         },
     );
     let rendered = render_lines(&cell.display_lines(/*width*/ 64));
@@ -1176,6 +1178,7 @@ fn web_search_history_cell_short_query_does_not_wrap() {
         WebSearchAction::Search {
             query: Some(query),
             queries: None,
+            sources: None,
         },
     );
     let rendered = render_lines(&cell.display_lines(/*width*/ 64));
@@ -1195,6 +1198,7 @@ fn web_search_history_cell_transcript_snapshot() {
         WebSearchAction::Search {
             query: Some(query),
             queries: None,
+            sources: None,
         },
     );
     let rendered = render_lines(&cell.transcript_lines(/*width*/ 64)).join("\n");

@@ -20,6 +20,7 @@ use codex_app_server_protocol::TurnStartParams;
 use codex_app_server_protocol::TurnStartResponse;
 use codex_app_server_protocol::UserInput as V2UserInput;
 use codex_app_server_protocol::WebSearchAction;
+use codex_app_server_protocol::WebSearchSource;
 use codex_config::types::AuthCredentialsStoreMode;
 use core_test_support::responses;
 use pretty_assertions::assert_eq;
@@ -39,6 +40,15 @@ use wiremock::matchers::path;
 const DEFAULT_READ_TIMEOUT: Duration = Duration::from_secs(60);
 #[cfg(not(any(target_os = "macos", windows)))]
 const DEFAULT_READ_TIMEOUT: Duration = Duration::from_secs(10);
+
+const SEARCH_OUTPUT: &str = r#"OpenAI docs (https://openai.com/docs)
+Documentation
+
+OpenAI docs (https://openai.com/docs)
+Duplicate result
+
+Example article (https://example.com/article)
+Article excerpt"#;
 
 #[tokio::test]
 async fn standalone_web_search_round_trips_output() -> Result<()> {
@@ -173,7 +183,7 @@ async fn standalone_web_search_round_trips_output() -> Result<()> {
             "call_id": call_id,
             "output": [{
                 "type": "input_text",
-                "text": "Search result",
+                "text": SEARCH_OUTPUT,
             }],
         })
     );
@@ -191,6 +201,14 @@ async fn standalone_web_search_round_trips_output() -> Result<()> {
         action: Some(WebSearchAction::Search {
             query: Some("standalone web search".to_string()),
             queries: None,
+            sources: Some(vec![
+                WebSearchSource::Url {
+                    url: "https://openai.com/docs".to_string(),
+                },
+                WebSearchSource::Url {
+                    url: "https://example.com/article".to_string(),
+                },
+            ]),
         }),
     };
     assert_eq!(completed.item, expected_completed_item);
@@ -261,7 +279,7 @@ async fn mount_search_response(server: &MockServer) {
         .and(path("/api/codex/alpha/search"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "encrypted_output": "ciphertext",
-            "output": "Search result",
+            "output": SEARCH_OUTPUT,
         })))
         .expect(1)
         .mount(server)

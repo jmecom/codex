@@ -12383,6 +12383,15 @@
                 "null"
               ]
             },
+            "sources": {
+              "items": {
+                "$ref": "#/definitions/WebSearchSource"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
             "type": {
               "enum": [
                 "search"
@@ -18450,6 +18459,15 @@
                 "null"
               ]
             },
+            "sources": {
+              "items": {
+                "$ref": "#/definitions/WebSearchSource"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
             "type": {
               "enum": [
                 "search"
@@ -18578,6 +18596,30 @@
         "live"
       ],
       "type": "string"
+    },
+    "WebSearchSource": {
+      "oneOf": [
+        {
+          "properties": {
+            "type": {
+              "enum": [
+                "url"
+              ],
+              "title": "UrlWebSearchSourceType",
+              "type": "string"
+            },
+            "url": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "url"
+          ],
+          "title": "UrlWebSearchSource",
+          "type": "object"
+        }
+      ]
     },
     "WebSearchToolConfig": {
       "additionalProperties": false,

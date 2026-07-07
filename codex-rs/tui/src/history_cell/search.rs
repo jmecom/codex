@@ -12,7 +12,7 @@ fn web_search_header(completed: bool) -> &'static str {
 
 fn web_search_action_detail(action: &WebSearchAction) -> String {
     match action {
-        WebSearchAction::Search { query, queries } => {
+        WebSearchAction::Search { query, queries, .. } => {
             query.clone().filter(|q| !q.is_empty()).unwrap_or_else(|| {
                 let items = queries.as_ref();
                 let first = items

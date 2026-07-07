@@ -15,7 +15,8 @@ Scenario: After five varied API-key-auth turns, remote manual compaction omits s
 -    "x-codex-window-id": "<UUID>:0"
 -  },
 -  "include": [
--    "reasoning.encrypted_content"
+-    "reasoning.encrypted_content",
+-    "web_search_call.action.sources"
 -  ],
 +    },
 +    {

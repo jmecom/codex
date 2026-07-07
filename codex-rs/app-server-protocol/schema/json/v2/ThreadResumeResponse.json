@@ -2350,6 +2350,15 @@
                 "null"
               ]
             },
+            "sources": {
+              "items": {
+                "$ref": "#/definitions/WebSearchSource"
+              },
+              "type": [
+                "array",
+                "null"
+              ]
+            },
             "type": {
               "enum": [
                 "search"
@@ -2428,6 +2437,30 @@
             "type"
           ],
           "title": "OtherWebSearchAction",
+          "type": "object"
+        }
+      ]
+    },
+    "WebSearchSource": {
+      "oneOf": [
+        {
+          "properties": {
+            "type": {
+              "enum": [
+                "url"
+              ],
+              "title": "UrlWebSearchSourceType",
+              "type": "string"
+            },
+            "url": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "url"
+          ],
+          "title": "UrlWebSearchSource",
           "type": "object"
         }
       ]

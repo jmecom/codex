@@ -711,6 +711,7 @@ fn response_bodies_for_step(scenario_name: &str, idx: usize, step: Step) -> Vec<
                 &format!("{response_id}-web-search"),
                 "completed",
                 &format!("{scenario_name} parity query"),
+                &[],
             ),
             responses::ev_assistant_message(
                 &format!("{response_id}-message"),
