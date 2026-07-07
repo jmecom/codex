@@ -657,6 +657,8 @@ pub(crate) struct ChatWidget {
     frame_requester: FrameRequester,
     // Whether startup should render the session header banner at all.
     show_splash_banner: bool,
+    // Whether patch events should show a focused diff for the changed file.
+    show_last_changed_file_diff: bool,
     // Whether to include the initial welcome banner on session configured
     show_welcome_banner: bool,
     show_announcement_tip: bool,

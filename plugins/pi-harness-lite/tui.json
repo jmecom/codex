@@ -12,6 +12,9 @@
   "theme": {
     "source": "ghostty"
   },
+  "changes": {
+    "lastChangedFileDiff": "visible"
+  },
   "startup": {
     "splashBanner": "hidden",
     "announcementTip": "hidden"

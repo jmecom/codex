@@ -1,0 +1,10 @@
+---
+source: tui/src/chatwidget/tests/exec_flow.rs
+expression: rendered
+---
+• Last changed file: src/main.rs (+1 -1) of 2 files
+
+    1  fn main() {
+    2 -    println!("stock codex");
+    2 +    println!("jmecom codex");
+    3  }

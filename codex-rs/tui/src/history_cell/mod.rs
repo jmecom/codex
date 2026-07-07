@@ -12,6 +12,7 @@
 
 use crate::diff_model::FileChange;
 use crate::diff_render::create_diff_summary;
+use crate::diff_render::create_last_changed_file_diff;
 use crate::diff_render::display_path_for;
 use crate::exec_cell::CommandOutput;
 use crate::exec_cell::OutputLinesParams;

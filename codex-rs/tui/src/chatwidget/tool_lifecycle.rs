@@ -9,7 +9,16 @@ use codex_utils_path_uri::LegacyAppPathString;
 impl ChatWidget {
     pub(super) fn on_patch_apply_begin(&mut self, changes: HashMap<PathBuf, FileChange>) {
         self.record_visible_turn_activity();
-        self.add_to_history(history_cell::new_patch_event(changes, &self.config.cwd));
+        let display = if self.show_last_changed_file_diff {
+            history_cell::PatchEventDisplay::LastChangedFileDiff
+        } else {
+            history_cell::PatchEventDisplay::Summary
+        };
+        self.add_to_history(history_cell::new_patch_event(
+            changes,
+            &self.config.cwd,
+            display,
+        ));
     }
 
     pub(super) fn on_view_image_tool_call(&mut self, path: LegacyAppPathString) {

@@ -49,6 +49,7 @@ impl ChatWidget {
         let active_collaboration_mask =
             Self::initial_collaboration_mask(&config, model_catalog.as_ref(), model_override);
         let show_splash_banner = tui_contributions.show_splash_banner();
+        let show_last_changed_file_diff = tui_contributions.show_last_changed_file_diff();
         let show_announcement_tip = tui_contributions.show_announcement_tip();
         let header_model = active_collaboration_mask
             .as_ref()
@@ -207,6 +208,7 @@ impl ChatWidget {
             chat_keymap,
             queued_message_edit_hint_binding,
             show_splash_banner,
+            show_last_changed_file_diff,
             show_welcome_banner: is_first_run && show_splash_banner,
             show_announcement_tip,
             startup_tooltip_override: if show_announcement_tip {

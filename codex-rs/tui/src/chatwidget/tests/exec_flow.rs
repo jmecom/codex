@@ -1443,6 +1443,44 @@ async fn apply_patch_events_emit_history_cells() {
 }
 
 #[tokio::test]
+async fn plugin_last_changed_file_diff_focuses_patch_history_snapshot() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.show_last_changed_file_diff = true;
+
+    let mut changes = HashMap::new();
+    changes.insert(
+        PathBuf::from("README.md"),
+        FileChange::Add {
+            content: "demo\n".to_string(),
+        },
+    );
+    changes.insert(
+        PathBuf::from("src/main.rs"),
+        FileChange::Update {
+            unified_diff: "\
+@@ -1,3 +1,3 @@
+ fn main() {
+-    println!(\"stock codex\");
++    println!(\"jmecom codex\");
+ }
+"
+            .to_string(),
+            move_path: None,
+        },
+    );
+
+    handle_patch_apply_begin(&mut chat, "c1", "turn-c1", changes);
+
+    let cells = drain_insert_history(&mut rx);
+    assert_eq!(cells.len(), 1);
+    let rendered = lines_to_single_string(&cells[0]);
+    assert!(rendered.contains("Last changed file"));
+    assert!(rendered.contains("src/main.rs"));
+    assert!(!rendered.contains("README.md"));
+    assert_chatwidget_snapshot!("plugin_last_changed_file_diff", rendered);
+}
+
+#[tokio::test]
 async fn apply_patch_manual_approval_adjusts_header() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
 

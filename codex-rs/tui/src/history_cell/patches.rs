@@ -7,31 +7,49 @@ use codex_utils_path_uri::LegacyAppPathString;
 pub(crate) struct PatchHistoryCell {
     changes: HashMap<PathBuf, FileChange>,
     cwd: PathBuf,
+    display: PatchEventDisplay,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum PatchEventDisplay {
+    Summary,
+    LastChangedFileDiff,
 }
 
 impl HistoryCell for PatchHistoryCell {
     fn display_lines(&self, width: u16) -> Vec<Line<'static>> {
-        create_diff_summary(&self.changes, &self.cwd, width as usize)
+        match self.display {
+            PatchEventDisplay::Summary => {
+                create_diff_summary(&self.changes, &self.cwd, width as usize)
+            }
+            PatchEventDisplay::LastChangedFileDiff => {
+                create_last_changed_file_diff(&self.changes, &self.cwd, width as usize)
+            }
+        }
     }
 
     fn raw_lines(&self) -> Vec<Line<'static>> {
-        plain_lines(create_diff_summary(
-            &self.changes,
-            &self.cwd,
-            RAW_DIFF_SUMMARY_WIDTH,
-        ))
+        let lines = match self.display {
+            PatchEventDisplay::Summary => {
+                create_diff_summary(&self.changes, &self.cwd, RAW_DIFF_SUMMARY_WIDTH)
+            }
+            PatchEventDisplay::LastChangedFileDiff => {
+                create_last_changed_file_diff(&self.changes, &self.cwd, RAW_DIFF_SUMMARY_WIDTH)
+            }
+        };
+        plain_lines(lines)
     }
 }
-/// Create a new `PendingPatch` cell that lists the file‑level summary of
-/// a proposed patch. The summary lines should already be formatted (e.g.
-/// "A path/to/file.rs").
+/// Create a new patch cell for a proposed or started patch event.
 pub(crate) fn new_patch_event(
     changes: HashMap<PathBuf, FileChange>,
     cwd: &Path,
+    display: PatchEventDisplay,
 ) -> PatchHistoryCell {
     PatchHistoryCell {
         changes,
         cwd: cwd.to_path_buf(),
+        display,
     }
 }
 

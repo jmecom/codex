@@ -58,6 +58,7 @@ pub(crate) struct TuiContributionSet {
     pub(crate) status_line: Option<Vec<String>>,
     pub(crate) footer_layout: Option<FooterLayoutPreset>,
     pub(crate) theme: Option<PluginThemeContribution>,
+    pub(crate) changes: ChangeUiContribution,
     pub(crate) startup: StartupUiContribution,
     pub(crate) slash_commands: Vec<PluginSlashCommand>,
 }
@@ -72,6 +73,24 @@ pub(crate) struct PluginThemeContribution {
 #[serde(rename_all = "kebab-case")]
 pub(crate) enum PluginThemeSource {
     Ghostty,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum LastChangedFileDiffVisibility {
+    Visible,
+    Hidden,
+}
+
+impl LastChangedFileDiffVisibility {
+    fn is_visible(self) -> bool {
+        matches!(self, Self::Visible)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) struct ChangeUiContribution {
+    pub(crate) last_changed_file_diff: Option<LastChangedFileDiffVisibility>,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -89,6 +108,8 @@ struct RawTuiContribution {
     layout: Option<RawTuiLayout>,
     #[serde(default)]
     theme: Option<RawTuiThemeContribution>,
+    #[serde(default)]
+    changes: Option<RawChangeUiContribution>,
     #[serde(default)]
     startup: Option<RawStartupUiContribution>,
     #[serde(default)]
@@ -109,6 +130,13 @@ struct RawTuiThemeContribution {
     source: Option<PluginThemeSource>,
     #[serde(default)]
     name: Option<String>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RawChangeUiContribution {
+    #[serde(default)]
+    last_changed_file_diff: Option<LastChangedFileDiffVisibility>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -199,6 +227,12 @@ impl TuiContributionSet {
             .is_none_or(StartupElementVisibility::is_visible)
     }
 
+    pub(crate) fn show_last_changed_file_diff(&self) -> bool {
+        self.changes
+            .last_changed_file_diff
+            .is_some_and(LastChangedFileDiffVisibility::is_visible)
+    }
+
     fn merge_from_plugin(
         &mut self,
         contribution: TuiContributionSet,
@@ -213,6 +247,7 @@ impl TuiContributionSet {
         if contribution.theme.is_some() {
             self.theme = contribution.theme;
         }
+        self.changes.merge_from(contribution.changes);
         self.startup.merge_from(contribution.startup);
         for command in contribution.slash_commands {
             if seen_slash_commands.insert(command.name.clone()) {
@@ -224,6 +259,14 @@ impl TuiContributionSet {
                     "ignoring duplicate plugin slash command"
                 );
             }
+        }
+    }
+}
+
+impl ChangeUiContribution {
+    fn merge_from(&mut self, contribution: Self) {
+        if contribution.last_changed_file_diff.is_some() {
+            self.last_changed_file_diff = contribution.last_changed_file_diff;
         }
     }
 }
@@ -248,6 +291,7 @@ fn parse_tui_contribution(
     let status_line = raw.status_line.map(normalize_status_line);
     let footer_layout = raw.layout.and_then(|layout| layout.footer);
     let theme = raw.theme.and_then(normalize_theme_contribution);
+    let changes = raw.changes.map(normalize_change_ui).unwrap_or_default();
     let startup = raw.startup.map(normalize_startup_ui).unwrap_or_default();
     let slash_commands =
         normalize_plugin_slash_commands(plugin_id, plugin_display_name, raw.slash_commands);
@@ -256,6 +300,7 @@ fn parse_tui_contribution(
         status_line,
         footer_layout,
         theme,
+        changes,
         startup,
         slash_commands,
     })
@@ -280,6 +325,12 @@ fn normalize_theme_name(name: &str) -> Option<String> {
     name.chars()
         .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || matches!(ch, '-' | '_'))
         .then(|| name.to_string())
+}
+
+fn normalize_change_ui(raw: RawChangeUiContribution) -> ChangeUiContribution {
+    ChangeUiContribution {
+        last_changed_file_diff: raw.last_changed_file_diff,
+    }
 }
 
 fn normalize_startup_ui(raw: RawStartupUiContribution) -> StartupUiContribution {

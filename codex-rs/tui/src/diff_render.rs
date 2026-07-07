@@ -352,6 +352,19 @@ pub(crate) fn create_diff_summary(
     render_changes_block(rows, wrap_cols, cwd)
 }
 
+pub(crate) fn create_last_changed_file_diff(
+    changes: &HashMap<PathBuf, FileChange>,
+    cwd: &Path,
+    wrap_cols: usize,
+) -> Vec<RtLine<'static>> {
+    let rows = collect_rows(changes);
+    let file_count = rows.len();
+    let Some(row) = select_changed_file_preview_row(rows) else {
+        return Vec::new();
+    };
+    render_last_changed_file_block(row, file_count, wrap_cols, cwd)
+}
+
 // Shared row for per-file presentation
 #[derive(Clone)]
 struct Row {
@@ -390,6 +403,17 @@ fn collect_rows(changes: &HashMap<PathBuf, FileChange>) -> Vec<Row> {
     rows
 }
 
+fn select_changed_file_preview_row(rows: Vec<Row>) -> Option<Row> {
+    rows.into_iter().max_by_key(|row| {
+        let priority = match &row.change {
+            FileChange::Update { .. } => 2,
+            FileChange::Add { .. } => 1,
+            FileChange::Delete { .. } => 0,
+        };
+        (priority, row.path.clone())
+    })
+}
+
 fn render_line_count_summary(added: usize, removed: usize) -> Vec<RtSpan<'static>> {
     let mut spans = Vec::new();
     spans.push("(".into());
@@ -400,17 +424,48 @@ fn render_line_count_summary(added: usize, removed: usize) -> Vec<RtSpan<'static
     spans
 }
 
+fn render_path(row: &Row, cwd: &Path) -> Vec<RtSpan<'static>> {
+    let mut spans = Vec::new();
+    spans.push(display_path_for(&row.path, cwd).into());
+    if let Some(move_path) = &row.move_path {
+        spans.push(format!(" → {}", display_path_for(move_path, cwd)).into());
+    }
+    spans
+}
+
+fn render_last_changed_file_block(
+    row: Row,
+    file_count: usize,
+    wrap_cols: usize,
+    cwd: &Path,
+) -> Vec<RtLine<'static>> {
+    let mut out: Vec<RtLine<'static>> = Vec::new();
+    let mut header_spans: Vec<RtSpan<'static>> =
+        vec!["• ".dim(), "Last changed file".bold(), ": ".dim()];
+    header_spans.extend(render_path(&row, cwd));
+    header_spans.push(" ".into());
+    header_spans.extend(render_line_count_summary(row.added, row.removed));
+    if file_count > 1 {
+        header_spans.push(format!(" of {file_count} files").dim());
+    }
+    out.push(RtLine::from(header_spans));
+    out.push("".into());
+
+    let lang_path = row.move_path.as_deref().unwrap_or(&row.path);
+    let lang = detect_lang_for_path(lang_path);
+    let mut lines = vec![];
+    render_change(
+        &row.change,
+        &mut lines,
+        wrap_cols.saturating_sub(4).max(1),
+        lang.as_deref(),
+    );
+    out.extend(prefix_lines(lines, "    ".into(), "    ".into()));
+    out
+}
+
 fn render_changes_block(rows: Vec<Row>, wrap_cols: usize, cwd: &Path) -> Vec<RtLine<'static>> {
     let mut out: Vec<RtLine<'static>> = Vec::new();
-
-    let render_path = |row: &Row| -> Vec<RtSpan<'static>> {
-        let mut spans = Vec::new();
-        spans.push(display_path_for(&row.path, cwd).into());
-        if let Some(move_path) = &row.move_path {
-            spans.push(format!(" → {}", display_path_for(move_path, cwd)).into());
-        }
-        spans
-    };
 
     // Header
     let total_added: usize = rows.iter().map(|r| r.added).sum();
@@ -426,7 +481,7 @@ fn render_changes_block(rows: Vec<Row>, wrap_cols: usize, cwd: &Path) -> Vec<RtL
         };
         header_spans.push(verb.bold());
         header_spans.push(" ".into());
-        header_spans.extend(render_path(row));
+        header_spans.extend(render_path(row, cwd));
         header_spans.push(" ".into());
         header_spans.extend(render_line_count_summary(row.added, row.removed));
     } else {
@@ -446,7 +501,7 @@ fn render_changes_block(rows: Vec<Row>, wrap_cols: usize, cwd: &Path) -> Vec<RtL
         if !skip_file_header {
             let mut header: Vec<RtSpan<'static>> = Vec::new();
             header.push("  └ ".dim());
-            header.extend(render_path(&r));
+            header.extend(render_path(&r, cwd));
             header.push(" ".into());
             header.extend(render_line_count_summary(r.added, r.removed));
             out.push(RtLine::from(header));

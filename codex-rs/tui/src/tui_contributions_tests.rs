@@ -11,6 +11,7 @@ fn parses_status_line_layout_and_prompt_commands() {
   "statusLine": [" model-with-reasoning ", "", "current-dir"],
   "layout": { "footer": "minimal" },
   "theme": { "source": "ghostty" },
+  "changes": { "lastChangedFileDiff": "visible" },
   "startup": {
     "splashBanner": "hidden",
     "announcementTip": "hidden"
@@ -38,6 +39,9 @@ fn parses_status_line_layout_and_prompt_commands() {
                 source: PluginThemeSource::Ghostty,
                 name: DEFAULT_GHOSTTY_SYNC_THEME_NAME.to_string(),
             }),
+            changes: ChangeUiContribution {
+                last_changed_file_diff: Some(LastChangedFileDiffVisibility::Visible),
+            },
             startup: StartupUiContribution {
                 splash_banner: Some(StartupElementVisibility::Hidden),
                 announcement_tip: Some(StartupElementVisibility::Hidden),
@@ -107,6 +111,9 @@ fn merge_keeps_first_duplicate_command_and_last_singleton_layout_and_theme() {
             source: PluginThemeSource::Ghostty,
             name: "first-theme".to_string(),
         }),
+        changes: ChangeUiContribution {
+            last_changed_file_diff: Some(LastChangedFileDiffVisibility::Visible),
+        },
         startup: StartupUiContribution {
             splash_banner: Some(StartupElementVisibility::Hidden),
             announcement_tip: None,
@@ -125,6 +132,9 @@ fn merge_keeps_first_duplicate_command_and_last_singleton_layout_and_theme() {
             source: PluginThemeSource::Ghostty,
             name: "second-theme".to_string(),
         }),
+        changes: ChangeUiContribution {
+            last_changed_file_diff: Some(LastChangedFileDiffVisibility::Hidden),
+        },
         startup: StartupUiContribution {
             splash_banner: Some(StartupElementVisibility::Visible),
             announcement_tip: Some(StartupElementVisibility::Hidden),
@@ -151,6 +161,9 @@ fn merge_keeps_first_duplicate_command_and_last_singleton_layout_and_theme() {
                 source: PluginThemeSource::Ghostty,
                 name: "second-theme".to_string(),
             }),
+            changes: ChangeUiContribution {
+                last_changed_file_diff: Some(LastChangedFileDiffVisibility::Hidden),
+            },
             startup: StartupUiContribution {
                 splash_banner: Some(StartupElementVisibility::Visible),
                 announcement_tip: Some(StartupElementVisibility::Hidden),
