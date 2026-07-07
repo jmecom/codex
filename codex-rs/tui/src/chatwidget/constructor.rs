@@ -180,6 +180,7 @@ impl ChatWidget {
             plugins_active_tab_id: None,
             newly_installed_marketplace_tab_id: None,
             plugin_slash_commands: tui_contributions.slash_commands.clone(),
+            plugin_key_bindings: tui_contributions.key_bindings.clone(),
             interrupts: InterruptManager::new(),
             reasoning_buffer: String::new(),
             full_reasoning_buffer: String::new(),

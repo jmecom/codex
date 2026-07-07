@@ -1,4 +1,5 @@
 use super::*;
+use crossterm::event::KeyCode;
 use pretty_assertions::assert_eq;
 use std::collections::HashSet;
 
@@ -59,6 +60,7 @@ fn parses_status_line_layout_and_prompt_commands() {
                     "Make a plan before editing.".to_string()
                 ),
             }],
+            key_bindings: vec![],
         }
     );
 }
@@ -97,6 +99,51 @@ fn parses_terminal_slash_commands_relative_to_plugin_root() {
                 args: vec!["--limit".to_string(), "50".to_string()],
                 result: PluginTerminalCommandResult::ResumeThread,
             }),
+        }]
+    );
+}
+
+#[test]
+fn parses_plugin_key_bindings_for_slash_commands() {
+    let contribution = parse_tui_contribution(
+        "demo@test",
+        "Demo",
+        plugin_root(),
+        r#"{
+  "slashCommands": [
+    {
+      "name": "history-fzf",
+      "description": "Search conversation history with fzf.",
+      "terminalCommand": {
+        "command": "./scripts/history-fzf.py",
+        "result": "resume-thread"
+      }
+    }
+  ],
+  "keyBindings": [
+    { "key": "ctrl-r", "command": "history-fzf" }
+  ]
+}"#,
+    )
+    .expect("valid contribution");
+
+    let command = PluginSlashCommand {
+        plugin_id: "demo@test".to_string(),
+        name: "history-fzf".to_string(),
+        description: "Search conversation history with fzf.".to_string(),
+        action: PluginSlashCommandAction::TerminalCommand(PluginTerminalCommand {
+            plugin_id: "demo@test".to_string(),
+            command: plugin_root().join("scripts/history-fzf.py"),
+            args: vec![],
+            result: PluginTerminalCommandResult::ResumeThread,
+        }),
+    };
+    assert_eq!(
+        contribution.key_bindings,
+        vec![PluginKeyBinding {
+            plugin_id: "demo@test".to_string(),
+            key: crate::key_hint::ctrl(KeyCode::Char('r')),
+            command,
         }]
     );
 }
@@ -171,6 +218,16 @@ fn merge_keeps_first_duplicate_command_and_last_singleton_layout_and_theme() {
             description: "First".to_string(),
             action: PluginSlashCommandAction::SubmitPrompt("First prompt".to_string()),
         }],
+        key_bindings: vec![PluginKeyBinding {
+            plugin_id: "alpha@test".to_string(),
+            key: crate::key_hint::ctrl(KeyCode::Char('r')),
+            command: PluginSlashCommand {
+                plugin_id: "alpha@test".to_string(),
+                name: "plan-extra".to_string(),
+                description: "First".to_string(),
+                action: PluginSlashCommandAction::SubmitPrompt("First prompt".to_string()),
+            },
+        }],
     };
     let second = TuiContributionSet {
         status_line: Some(vec!["current-dir".to_string()]),
@@ -192,12 +249,23 @@ fn merge_keeps_first_duplicate_command_and_last_singleton_layout_and_theme() {
             description: "Second".to_string(),
             action: PluginSlashCommandAction::SubmitPrompt("Second prompt".to_string()),
         }],
+        key_bindings: vec![PluginKeyBinding {
+            plugin_id: "beta@test".to_string(),
+            key: crate::key_hint::ctrl(KeyCode::Char('r')),
+            command: PluginSlashCommand {
+                plugin_id: "beta@test".to_string(),
+                name: "plan-extra".to_string(),
+                description: "Second".to_string(),
+                action: PluginSlashCommandAction::SubmitPrompt("Second prompt".to_string()),
+            },
+        }],
     };
 
     let mut merged = TuiContributionSet::default();
-    let mut seen = HashSet::new();
-    merged.merge_from_plugin(first, &mut seen);
-    merged.merge_from_plugin(second, &mut seen);
+    let mut seen_slash_commands = HashSet::new();
+    let mut seen_key_bindings = HashSet::new();
+    merged.merge_from_plugin(first, &mut seen_slash_commands, &mut seen_key_bindings);
+    merged.merge_from_plugin(second, &mut seen_slash_commands, &mut seen_key_bindings);
 
     assert_eq!(
         merged,
@@ -220,6 +288,16 @@ fn merge_keeps_first_duplicate_command_and_last_singleton_layout_and_theme() {
                 name: "plan-extra".to_string(),
                 description: "First".to_string(),
                 action: PluginSlashCommandAction::SubmitPrompt("First prompt".to_string()),
+            }],
+            key_bindings: vec![PluginKeyBinding {
+                plugin_id: "alpha@test".to_string(),
+                key: crate::key_hint::ctrl(KeyCode::Char('r')),
+                command: PluginSlashCommand {
+                    plugin_id: "alpha@test".to_string(),
+                    name: "plan-extra".to_string(),
+                    description: "First".to_string(),
+                    action: PluginSlashCommandAction::SubmitPrompt("First prompt".to_string()),
+                },
             }],
         }
     );

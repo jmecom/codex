@@ -323,6 +323,7 @@ use crate::status_indicator_widget::STATUS_DETAILS_DEFAULT_MAX_LINES;
 use crate::status_indicator_widget::StatusDetailsCapitalization;
 use crate::text_formatting::truncate_text;
 use crate::tui::FrameRequester;
+use crate::tui_contributions::PluginKeyBinding;
 use crate::tui_contributions::PluginSlashCommand;
 use crate::tui_contributions::TuiContributionSet;
 mod command_lifecycle;
@@ -622,6 +623,7 @@ pub(crate) struct ChatWidget {
     plugins_active_tab_id: Option<String>,
     newly_installed_marketplace_tab_id: Option<String>,
     plugin_slash_commands: Vec<PluginSlashCommand>,
+    plugin_key_bindings: Vec<PluginKeyBinding>,
     // Queue of interruptive UI events deferred during an active write cycle
     interrupts: InterruptManager,
     // Accumulates the current reasoning block text to extract a header

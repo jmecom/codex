@@ -105,6 +105,10 @@ impl ChatWidget {
             _ => {}
         }
 
+        if self.handle_plugin_key_binding(key_event) {
+            return;
+        }
+
         if key_event.kind == KeyEventKind::Press
             && self.chat_keymap.edit_queued_message.is_pressed(key_event)
             && self.has_queued_follow_up_messages()
@@ -182,6 +186,26 @@ impl ChatWidget {
                 self.handle_composer_input_result(input_result, had_modal_or_popup);
             }
         }
+    }
+
+    fn handle_plugin_key_binding(&mut self, key_event: KeyEvent) -> bool {
+        if !self.bottom_pane.no_modal_or_popup_active() {
+            return false;
+        }
+        let Some(binding) = self
+            .plugin_key_bindings
+            .iter()
+            .find(|binding| binding.key.is_press(key_event))
+            .cloned()
+        else {
+            return false;
+        };
+
+        self.bottom_pane.clear_quit_shortcut_hint();
+        self.quit_shortcut_expires_at = None;
+        self.quit_shortcut_key = None;
+        self.handle_plugin_slash_command_dispatch(binding.command);
+        true
     }
 
     /// Attach a local image to the composer when the active model supports image inputs.

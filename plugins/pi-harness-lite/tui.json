@@ -26,5 +26,11 @@
         "result": "resume-thread"
       }
     }
+  ],
+  "keyBindings": [
+    {
+      "key": "ctrl-r",
+      "command": "history-fzf"
+    }
   ]
 }

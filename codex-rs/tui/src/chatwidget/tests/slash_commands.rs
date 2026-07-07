@@ -2407,6 +2407,37 @@ async fn slash_resume_with_arg_requests_named_session_while_mcp_startup_is_runni
 }
 
 #[tokio::test]
+async fn plugin_key_binding_overrides_ctrl_r_history_search() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    let terminal_command = crate::tui_contributions::PluginTerminalCommand {
+        plugin_id: "pi-harness-lite@personal".to_string(),
+        command: PathBuf::from("/plugins/pi-harness-lite/scripts/history-fzf.py"),
+        args: vec![],
+        result: crate::tui_contributions::PluginTerminalCommandResult::ResumeThread,
+    };
+    let command = crate::tui_contributions::PluginSlashCommand {
+        plugin_id: "pi-harness-lite@personal".to_string(),
+        name: "history-fzf".to_string(),
+        description: "Search saved Codex conversations with fzf.".to_string(),
+        action: crate::tui_contributions::PluginSlashCommandAction::TerminalCommand(
+            terminal_command.clone(),
+        ),
+    };
+    chat.plugin_key_bindings = vec![crate::tui_contributions::PluginKeyBinding {
+        plugin_id: "pi-harness-lite@personal".to_string(),
+        key: key_hint::ctrl(KeyCode::Char('r')),
+        command,
+    }];
+
+    chat.handle_key_event(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::CONTROL));
+
+    assert_matches!(
+        rx.try_recv(),
+        Ok(AppEvent::RunPluginTerminalCommand { command: emitted }) if emitted == terminal_command
+    );
+}
+
+#[tokio::test]
 #[serial]
 async fn slash_pets_opens_picker() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;

@@ -14,6 +14,8 @@ use codex_core_plugins::manifest::load_plugin_manifest;
 use serde::Deserialize;
 use tracing::warn;
 
+use crate::key_hint::KeyBinding;
+use crate::keymap::parse_keybinding;
 use crate::legacy_core::config::Config;
 use crate::slash_command::SlashCommand;
 
@@ -23,6 +25,8 @@ const MAX_PLUGIN_SLASH_COMMANDS: usize = 64;
 const MAX_PLUGIN_SLASH_COMMAND_NAME_LEN: usize = 40;
 const MAX_PLUGIN_SLASH_COMMAND_DESCRIPTION_LEN: usize = 160;
 const MAX_PLUGIN_SLASH_COMMAND_PROMPT_LEN: usize = 4000;
+const MAX_PLUGIN_KEY_BINDINGS: usize = 64;
+const MAX_PLUGIN_KEY_BINDING_SPEC_LEN: usize = 80;
 const MAX_PLUGIN_TERMINAL_COMMAND_LEN: usize = 512;
 const MAX_PLUGIN_TERMINAL_COMMAND_ARGS: usize = 32;
 const MAX_PLUGIN_TERMINAL_COMMAND_ARG_LEN: usize = 512;
@@ -59,6 +63,13 @@ pub(crate) struct PluginSlashCommand {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct PluginKeyBinding {
+    pub(crate) plugin_id: String,
+    pub(crate) key: KeyBinding,
+    pub(crate) command: PluginSlashCommand,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum PluginSlashCommandAction {
     SubmitPrompt(String),
     TerminalCommand(PluginTerminalCommand),
@@ -88,6 +99,7 @@ pub(crate) struct TuiContributionSet {
     pub(crate) changes: ChangeUiContribution,
     pub(crate) startup: StartupUiContribution,
     pub(crate) slash_commands: Vec<PluginSlashCommand>,
+    pub(crate) key_bindings: Vec<PluginKeyBinding>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -141,6 +153,8 @@ struct RawTuiContribution {
     startup: Option<RawStartupUiContribution>,
     #[serde(default)]
     slash_commands: Vec<RawTuiSlashCommand>,
+    #[serde(default)]
+    key_bindings: Vec<RawPluginKeyBinding>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -199,6 +213,15 @@ struct RawPluginTerminalCommand {
     result: PluginTerminalCommandResult,
 }
 
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RawPluginKeyBinding {
+    #[serde(default)]
+    key: String,
+    #[serde(default)]
+    command: String,
+}
+
 impl TuiContributionSet {
     pub(crate) async fn load_enabled_plugins(config: &Config) -> Self {
         let plugins_manager = PluginsManager::new(config.codex_home.to_path_buf());
@@ -208,6 +231,7 @@ impl TuiContributionSet {
 
         let mut set = Self::default();
         let mut seen_slash_commands = HashSet::new();
+        let mut seen_key_bindings = HashSet::new();
         for plugin in loaded_plugins
             .plugins()
             .iter()
@@ -246,7 +270,11 @@ impl TuiContributionSet {
                     continue;
                 }
             };
-            set.merge_from_plugin(contribution, &mut seen_slash_commands);
+            set.merge_from_plugin(
+                contribution,
+                &mut seen_slash_commands,
+                &mut seen_key_bindings,
+            );
         }
 
         set
@@ -280,6 +308,7 @@ impl TuiContributionSet {
         &mut self,
         contribution: TuiContributionSet,
         seen_slash_commands: &mut HashSet<String>,
+        seen_key_bindings: &mut HashSet<KeyBinding>,
     ) {
         if contribution.status_line.is_some() {
             self.status_line = contribution.status_line;
@@ -292,14 +321,36 @@ impl TuiContributionSet {
         }
         self.changes.merge_from(contribution.changes);
         self.startup.merge_from(contribution.startup);
+        let mut accepted_plugin_commands = HashSet::new();
         for command in contribution.slash_commands {
             if seen_slash_commands.insert(command.name.clone()) {
+                accepted_plugin_commands.insert(command.name.clone());
                 self.slash_commands.push(command);
             } else {
                 warn!(
                     plugin = command.plugin_id,
                     command = command.name,
                     "ignoring duplicate plugin slash command"
+                );
+            }
+        }
+        for binding in contribution.key_bindings {
+            if !accepted_plugin_commands.contains(&binding.command.name) {
+                warn!(
+                    plugin = binding.plugin_id,
+                    command = binding.command.name,
+                    key = %binding.key.display_label(),
+                    "ignoring plugin key binding for unavailable command"
+                );
+                continue;
+            }
+            if seen_key_bindings.insert(binding.key) {
+                self.key_bindings.push(binding);
+            } else {
+                warn!(
+                    plugin = binding.plugin_id,
+                    key = %binding.key.display_label(),
+                    "ignoring duplicate plugin key binding"
                 );
             }
         }
@@ -343,6 +394,8 @@ fn parse_tui_contribution(
         plugin_root,
         raw.slash_commands,
     );
+    let key_bindings =
+        normalize_plugin_key_bindings(plugin_id, raw.key_bindings, slash_commands.as_slice());
 
     Ok(TuiContributionSet {
         status_line,
@@ -351,6 +404,7 @@ fn parse_tui_contribution(
         changes,
         startup,
         slash_commands,
+        key_bindings,
     })
 }
 
@@ -458,6 +512,72 @@ fn normalize_plugin_slash_commands(
             name,
             description,
             action,
+        });
+    }
+
+    normalized
+}
+
+fn normalize_plugin_key_bindings(
+    plugin_id: &str,
+    bindings: Vec<RawPluginKeyBinding>,
+    slash_commands: &[PluginSlashCommand],
+) -> Vec<PluginKeyBinding> {
+    let mut normalized = Vec::new();
+    let mut seen_keys = HashSet::new();
+    for raw in bindings.into_iter().take(MAX_PLUGIN_KEY_BINDINGS) {
+        let key_spec = raw.key.trim();
+        if key_spec.is_empty() || key_spec.chars().count() > MAX_PLUGIN_KEY_BINDING_SPEC_LEN {
+            warn!(
+                plugin = plugin_id,
+                key = raw.key,
+                "ignoring plugin key binding with invalid key"
+            );
+            continue;
+        }
+        let key_spec = key_spec.to_ascii_lowercase();
+        let Some(key) = parse_keybinding(&key_spec) else {
+            warn!(
+                plugin = plugin_id,
+                key = key_spec,
+                "ignoring plugin key binding with invalid key"
+            );
+            continue;
+        };
+        if !seen_keys.insert(key) {
+            warn!(
+                plugin = plugin_id,
+                key = %key.display_label(),
+                "ignoring duplicate plugin key binding in contribution file"
+            );
+            continue;
+        }
+
+        let Some(command_name) = normalize_plugin_slash_command_name(&raw.command) else {
+            warn!(
+                plugin = plugin_id,
+                command = raw.command,
+                "ignoring plugin key binding with invalid command"
+            );
+            continue;
+        };
+        let Some(command) = slash_commands
+            .iter()
+            .find(|command| command.name == command_name)
+        else {
+            warn!(
+                plugin = plugin_id,
+                command = command_name,
+                key = %key.display_label(),
+                "ignoring plugin key binding for unknown command"
+            );
+            continue;
+        };
+
+        normalized.push(PluginKeyBinding {
+            plugin_id: plugin_id.to_string(),
+            key,
+            command: command.clone(),
         });
     }
 
