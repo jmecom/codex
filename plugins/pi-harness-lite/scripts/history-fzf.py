@@ -9,7 +9,8 @@ from pathlib import Path
 
 MAX_FILES = 2000
 MAX_ROWS = 5000
-MAX_SNIPPET_CHARS = 260
+MAX_LIST_SNIPPET_CHARS = 120
+MAX_PREVIEW_CHARS = 2000
 AGENT_PHASES = {None, "final_answer"}
 
 
@@ -20,6 +21,7 @@ class HistoryRow:
     role: str
     cwd: str
     snippet: str
+    preview: str
     file_mtime: float
 
 
@@ -95,11 +97,17 @@ def is_internal_text(text: str) -> bool:
     )
 
 
-def shorten(text: str) -> str:
+def shorten(text: str, limit: int) -> str:
     text = clean_text(text)
-    if len(text) <= MAX_SNIPPET_CHARS:
+    if len(text) <= limit:
         return text
-    return f"{text[: MAX_SNIPPET_CHARS - 1]}..."
+    return f"{text[: limit - 1]}..."
+
+
+def timestamp_label(timestamp: str) -> str:
+    if len(timestamp) >= 16 and timestamp[4] == "-" and timestamp[10] == "T":
+        return f"{timestamp[5:10]} {timestamp[11:16]}"
+    return timestamp or "-"
 
 
 def cwd_label(cwd: str) -> str:
@@ -215,7 +223,8 @@ def append_row(
             thread_id=meta.thread_id,
             role=role,
             cwd=cwd_label(meta.cwd),
-            snippet=shorten(text),
+            snippet=shorten(text, MAX_LIST_SNIPPET_CHARS),
+            preview=shorten(text, MAX_PREVIEW_CHARS),
             file_mtime=meta.file_mtime,
         )
     )
@@ -320,7 +329,16 @@ def load_rows() -> list[HistoryRow]:
 
 def fzf_input(rows: list[HistoryRow]) -> str:
     return "\n".join(
-        "\t".join([row.timestamp, row.thread_id, row.role, row.cwd, row.snippet])
+        "\t".join(
+            [
+                timestamp_label(row.timestamp),
+                row.thread_id,
+                row.role,
+                row.cwd,
+                row.snippet,
+                row.preview,
+            ]
+        )
         for row in rows
     )
 
@@ -330,6 +348,7 @@ def run_fzf(rows: list[HistoryRow]) -> str | None:
     if fzf is None:
         print("history-fzf needs fzf on PATH.", file=sys.stderr)
         return None
+    preview = "printf 'time: %s\\nthread: %s\\nrole: %s\\ncwd: %s\\n\\n%s\\n' {1} {2} {3} {4} {6}"
 
     process = subprocess.run(
         [
@@ -339,10 +358,22 @@ def run_fzf(rows: list[HistoryRow]) -> str | None:
             "\t",
             "--with-nth",
             "1,3,4,5",
+            "--accept-nth",
+            "2",
+            "--wrap",
+            "--wrap-sign",
+            "  ",
+            "--highlight-line",
             "--prompt",
             "Codex project history> ",
             "--header",
             f"{len(rows)} rows from {current_project_scope()}",
+            "--preview",
+            preview,
+            "--preview-window",
+            "right,60%,wrap,border-left",
+            "--preview-label",
+            " message ",
             "--height",
             "80%",
             "--layout",
@@ -363,9 +394,9 @@ def run_fzf(rows: list[HistoryRow]) -> str | None:
     if not selected:
         return None
     parts = selected.split("\t")
-    if len(parts) < 2:
-        return None
-    return parts[1].strip() or None
+    if len(parts) >= 2:
+        return parts[1].strip() or None
+    return selected
 
 
 def main() -> int:
