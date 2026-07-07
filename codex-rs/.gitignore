@@ -1,6 +1,7 @@
 /target/
 /target-*/
 
+# Test marker for the last-changed-file plugin.
 # Recommended value of CARGO_TARGET_DIR when using Docker as explained in .devcontainer/README.md.
 /target-amd64/
 
