@@ -162,6 +162,7 @@ impl TestAppServer {
             codex_home: None,
             exec_server_delay: None,
             exec_server_program: None,
+            app_server_args: DEFAULT_APP_SERVER_ARGS,
         }
     }
 
@@ -213,6 +214,7 @@ impl TestAppServer {
             codex_home,
             /*exec_server_delay*/ None,
             /*exec_server_program*/ None,
+            DEFAULT_APP_SERVER_ARGS,
             extra_env_overrides,
         )
         .await
@@ -222,6 +224,7 @@ impl TestAppServer {
         codex_home: &Path,
         exec_server_delay: Option<Duration>,
         exec_server_program: Option<&Path>,
+        app_server_args: &[&str],
         extra_env_overrides: &[(&str, Option<&str>)],
     ) -> anyhow::Result<Self> {
         let environments_toml = codex_home.join("environments.toml");
@@ -270,8 +273,7 @@ impl TestAppServer {
         ];
         env_overrides.extend_from_slice(extra_env_overrides);
         let mut app_server =
-            Self::new_with_env_and_args(codex_home, &env_overrides, DEFAULT_APP_SERVER_ARGS)
-                .await?;
+            Self::new_with_env_and_args(codex_home, &env_overrides, app_server_args).await?;
         app_server.auto_env = Some(auto_env);
         app_server._local_websocket_exec_server = local_exec_server;
         app_server._exec_server_delay = exec_server_delay;
@@ -1862,6 +1864,7 @@ pub struct TestAppServerBuilder {
     codex_home: Option<PathBuf>,
     exec_server_delay: Option<Duration>,
     exec_server_program: Option<PathBuf>,
+    app_server_args: &'static [&'static str],
 }
 
 impl TestAppServerBuilder {
@@ -1885,6 +1888,15 @@ impl TestAppServerBuilder {
         self
     }
 
+    /// Omits debug-only flags that TestAppServer normally passes to app-server.
+    ///
+    /// Optimized Bazel macrobenchmarks use this because their app-server child
+    /// does not expose the debug-only test hooks.
+    pub fn without_debug_only_test_args(mut self) -> Self {
+        self.app_server_args = &[];
+        self
+    }
+
     /// Builds a server with the standard automatic test environment and a
     /// temporary CODEX_HOME by default.
     pub async fn build(self) -> anyhow::Result<TestAppServer> {
@@ -1892,6 +1904,7 @@ impl TestAppServerBuilder {
             codex_home,
             exec_server_delay,
             exec_server_program,
+            app_server_args,
         } = self;
         let (codex_home, owned_codex_home) = match codex_home {
             Some(codex_home) => (codex_home, None),
@@ -1907,6 +1920,7 @@ impl TestAppServerBuilder {
             &codex_home,
             exec_server_delay,
             exec_server_program.as_deref(),
+            app_server_args,
             &[],
         )
         .await?;
